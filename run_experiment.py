@@ -22,6 +22,7 @@ from train import (
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run a single ablation experiment")
     parser.add_argument("--activation", type=str, default="gelu", help="Activation function name (placeholder for now)")
+    parser.add_argument("--benchmark", type=str, choices=["breast_cancer", "tabarena"], default="breast_cancer", help="Benchmark to use for final evaluation")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--num_steps", type=int, default=2500, help="Number of training steps")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
@@ -62,6 +63,7 @@ def run_experiment(args):
     param_count = sum(p.numel() for p in model.parameters())
     config = {
         "activation": args.activation,
+        "benchmark": args.benchmark,
         "seed": args.seed,
         "num_steps": args.num_steps,
         "batch_size": args.batch_size,
@@ -112,14 +114,24 @@ def run_experiment(args):
     print(f"Checkpoints saved to {checkpoint_dir}")
 
     # Final evaluation
-    from train import eval as eval_fn
-
-    from model import NanoTabPFNClassifier
-
     model.eval()
-    classifier = NanoTabPFNClassifier(model, device)
-    final_scores = eval_fn(classifier)
-    print(f"Final scores: {final_scores}")
+
+    if args.benchmark == "tabarena":
+        from tabarena_eval import run_tabarena_eval
+        print("Running TabArena final evaluation...")
+        run_tabarena_eval(model, device, run_dir)
+    else:
+        from train import eval as eval_fn
+        from model import NanoTabPFNClassifier
+        classifier = NanoTabPFNClassifier(model, device)
+        final_scores = eval_fn(classifier)
+        print(f"Final scores: {final_scores}")
+        
+        # Save final local scores to a separate file so we don't mix them with step metrics
+        final_scores_path = run_dir / "final_scores.json"
+        with open(final_scores_path, "w") as f:
+            json.dump(final_scores, f, indent=2)
+        print(f"Final local scores saved to {final_scores_path}")
 
     return eval_history
 
