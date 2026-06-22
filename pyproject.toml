@@ -1,0 +1,32 @@
+[project]
+name = "tabpfn-ablation"
+version = "0.1.0"
+requires-python = "==3.11.*"
+dependencies = [
+    "torch==2.11.0",
+    "numpy>=2.0,<3",
+    "schedulefree>=0.6",
+    "h5py>=3.0",
+    "scikit-learn>=1.4",
+    "seaborn>=0.13",
+    "openml>=0.14",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.12",
+]
+
+[tool.ruff]
+line-length = 120
+exclude = ["prior.py"]  # upstream nanoTabPFN code, not ours to lint
+
+[tool.uv]
+environments = [
+    "sys_platform == 'linux'",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
