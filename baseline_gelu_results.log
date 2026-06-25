@@ -1,0 +1,117 @@
+time     3.1s | loss  0.5415
+time     3.6s | loss  0.5502
+time     4.2s | loss  0.5395
+time     4.8s | loss  0.4664
+time     5.4s | loss  0.5249
+time     6.0s | loss  0.5051
+time     6.5s | loss  0.5348
+time     7.1s | loss  0.4821
+time     7.7s | loss  0.4639
+time     8.2s | loss  0.5312
+time     8.8s | loss  0.5626
+time     9.3s | loss  0.5268
+time     9.9s | loss  0.5018
+time    10.5s | loss  0.5320
+time    11.0s | loss  0.4701
+time    11.6s | loss  0.4716
+time    12.2s | loss  0.4847
+time    12.7s | loss  0.4540
+time    13.3s | loss  0.5080
+time    13.9s | loss  0.5058
+time    14.4s | loss  0.4962
+time    15.0s | loss  0.4601
+time    15.5s | loss  0.4403
+time    16.1s | loss  0.4404
+time    16.7s | loss  0.5572
+time    17.3s | loss  0.4975
+time    17.9s | loss  0.4752
+time    18.4s | loss  0.5332
+time    19.0s | loss  0.5209
+time    19.6s | loss  0.4822
+time    20.2s | loss  0.4862
+time    20.8s | loss  0.5121
+time    21.3s | loss  0.5173
+time    21.9s | loss  0.5277
+time    22.5s | loss  0.5270
+time    23.1s | loss  0.5010
+time    23.6s | loss  0.4614
+time    24.2s | loss  0.4713
+time    24.7s | loss  0.5407
+time    25.3s | loss  0.4718
+time    25.9s | loss  0.5303
+time    26.4s | loss  0.4480
+time    27.0s | loss  0.5488
+time    27.6s | loss  0.4869
+time    28.1s | loss  0.3894
+time    28.7s | loss  0.5180
+time    29.3s | loss  0.5030
+time    29.8s | loss  0.4427
+time    30.4s | loss  0.5348
+time    31.0s | loss  0.4597
+time    31.5s | loss  0.5774
+time    32.1s | loss  0.4699
+time    32.7s | loss  0.4436
+time    33.2s | loss  0.5463
+time    33.8s | loss  0.4202
+time    34.4s | loss  0.5559
+time    34.9s | loss  0.4639
+time    35.5s | loss  0.5081
+time    36.1s | loss  0.5002
+time    36.6s | loss  0.5819
+time    37.2s | loss  0.4296
+time    37.8s | loss  0.5054
+time    38.3s | loss  0.5310
+time    38.9s | loss  0.4215
+time    39.5s | loss  0.3614
+time    40.1s | loss  0.4698
+time    40.6s | loss  0.4586
+time    41.2s | loss  0.5113
+time    41.8s | loss  0.4596
+time    42.4s | loss  0.4409
+time    42.9s | loss  0.4357
+time    43.5s | loss  0.4891
+time    44.1s | loss  0.4630
+time    44.6s | loss  0.6288
+time    45.2s | loss  0.5071
+time    45.8s | loss  0.4892
+time    46.4s | loss  0.5591
+time    46.9s | loss  0.4401
+time    47.5s | loss  0.5086
+time    48.1s | loss  0.3973
+time    48.7s | loss  0.4647
+time    49.2s | loss  0.4597
+time    49.8s | loss  0.4414
+time    50.4s | loss  0.4493
+time    50.9s | loss  0.4705
+time    51.5s | loss  0.4798
+time    52.1s | loss  0.5455
+time    52.6s | loss  0.4359
+time    53.2s | loss  0.5043
+time    53.7s | loss  0.4737
+time    54.3s | loss  0.4956
+time    54.9s | loss  0.4179
+time    55.4s | loss  0.5218
+time    56.0s | loss  0.4789
+time    56.6s | loss  0.5001
+time    57.1s | loss  0.4265
+time    57.7s | loss  0.5673
+time    58.2s | loss  0.4489
+time    58.8s | loss  0.5462
+time    59.4s | loss  0.4571
+Final evaluation:
+{'roc_auc': 0.9811127851915626, 'acc': 0.9438596491228071, 'balanced_acc': 0.9274913904433921}
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n564
+Job ID: 5220955
+Cluster: uc3
+User/Group: fr_pp216/fr_fr
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 12
+CPU Utilized: 00:01:14
+CPU Efficiency: 4.47% of 00:27:36 core-walltime
+Job Wall-clock time: 00:02:18
+Memory Utilized: 1.05 GB
+Memory Efficiency: 1.15% of 91.80 GB (91.80 GB/node)
