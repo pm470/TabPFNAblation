@@ -21,6 +21,7 @@ Every code change must follow this process. Do not skip steps.
 
 - After ANY code change, the corresponding spec file in `specs/` must be updated to match.
 - After ANY spec change without a code change, set `status: edited` in the spec frontmatter.
+- Checkboxes (`[x]`) must be used to track met criteria. Acceptance criteria can **only** be checked off if they have been explicitly verified against the codebase (e.g., via automated tests or manual inspection). When `status: implemented`, all AC checkboxes must be checked.
 - Never report a task as "done" if specs and code are out of sync.
 - Tests must verify acceptance criteria from specs, not implementation details.
 

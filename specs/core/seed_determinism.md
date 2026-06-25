@@ -16,17 +16,17 @@ As a researcher, I want full control over random seeds so that experiments are e
 
 ### set_randomness_seed()
 
-- [ ] AC-1: Sets `random.seed(seed)` for Python's built-in random module.
-- [ ] AC-2: Sets `np.random.seed(seed)` for NumPy's random module.
-- [ ] AC-3: Sets `torch.manual_seed(seed)` for PyTorch CPU operations.
-- [ ] AC-4: Sets `torch.cuda.manual_seed_all(seed)` for all CUDA devices.
-- [ ] AC-5: Sets `torch.backends.cudnn.deterministic = True`.
-- [ ] AC-6: Sets `torch.backends.cudnn.benchmark = False`.
+- [x] AC-1: Sets `random.seed(seed)` for Python's built-in random module.
+- [x] AC-2: Sets `np.random.seed(seed)` for NumPy's random module.
+- [x] AC-3: Sets `torch.manual_seed(seed)` for PyTorch CPU operations.
+- [x] AC-4: Sets `torch.cuda.manual_seed_all(seed)` for all CUDA devices.
+- [x] AC-5: Sets `torch.backends.cudnn.deterministic = True`.
+- [x] AC-6: Sets `torch.backends.cudnn.benchmark = False`.
 
 ### Determinism Guarantees
 
-- [ ] AC-7: Two runs with the same seed produce identical loss sequences at every eval step.
-- [ ] AC-8: Two runs with different seeds produce at least one different loss value across eval steps.
+- [x] AC-7: Two runs with the same seed produce identical loss sequences at every eval step.
+- [x] AC-8: Two runs with different seeds produce at least one different loss value across eval steps.
 
 ## Notes
 

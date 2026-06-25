@@ -1,6 +1,6 @@
 # Specification Files
 
-This directory contains structured specification documents for the TabPFN Activation Function Ablation Study project. Each spec documents **existing, implemented** functionality — they are snapshots of what the code currently does, not aspirational goals.
+This directory contains structured specification documents for the TabPFN Activation Function Ablation Study project. Specs drive the development process: they start as **aspirational goals** defining desired behavior, guide the implementation, and ultimately serve as **living snapshots** of what the committed code currently does. Code and specs must always remain in strict sync upon commit.
 
 ## Spec Format
 
@@ -52,10 +52,13 @@ Optional implementation notes.
 
 ## Acceptance Criteria Format
 
-- Each criterion uses the checkbox format: `- [ ] AC-N: Description`
+- Each criterion uses the checkbox format: `- [ ] AC-N: Description` (for unmet) or `- [x] AC-N: Description` (for met).
+- During active development (`status: new` or `status: edited`), check the boxes (`[x]`) for criteria that are currently met by the code, and leave them unchecked (`[ ]`) for those that are not.
+- **CRITICAL:** Acceptance criteria can **only** be checked off if they have been explicitly verified against the codebase (e.g., via automated tests or manual code inspection).
+- When `status: implemented`, **all** checkboxes must be checked (`[x]`).
 - Criteria must be **testable** — each one should be verifiable by an automated test or manual inspection.
 - Criteria must be **atomic** — one behavior per criterion.
-- Criteria are derived from the **actual source code**, not from desired behavior.
+- Criteria are initially derived from **desired behavior** for new features, and may evolve during implementation. Once committed, they must strictly match the **actual source code**.
 
 ## Directory Structure
 
