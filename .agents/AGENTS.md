@@ -1,5 +1,35 @@
 # TabPFN Activation Function Ablation Study
 
+## Development Workflow (MANDATORY)
+
+Every code change must follow this process. Do not skip steps.
+
+### 1. Understand → 2. Consult Guidelines → 3. Check Spec → 4. Implement → 5. Verify → 6. Sync Spec
+
+1. **Understand** the task fully before writing any code.
+2. **Read the relevant guideline** (lazy-load from `.agents/harness/`):
+   - Coding changes → read `.agents/harness/coding.md`
+   - Architecture or module changes → read `.agents/harness/architecture.md`
+   - Writing or modifying tests → read `.agents/harness/testing.md`
+   - Experiment design or running experiments → read `.agents/harness/research_methodology.md`
+3. **Check the relevant spec** in `specs/` — understand the acceptance criteria for the code being changed. If no spec exists, write one first with `status: new`.
+4. **Implement** the change. If writing new functionality, write tests first (derived from acceptance criteria, not from implementation).
+5. **Run verification**: `bash scripts/verify.sh` — fix ALL failures before considering the task done.
+6. **Sync the spec**: update the corresponding spec file to reflect the current behavior. Set `status: implemented` and `last_synced` to today's date.
+
+### Spec Sync Rules
+
+- After ANY code change, the corresponding spec file in `specs/` must be updated to match.
+- After ANY spec change without a code change, set `status: edited` in the spec frontmatter.
+- Never report a task as "done" if specs and code are out of sync.
+- Tests must verify acceptance criteria from specs, not implementation details.
+
+### Harness Correction
+
+If the agent produces output that technically passes verification but doesn't match project intent, the guideline files in `.agents/harness/` should be corrected — not just the code.
+
+---
+
 ## Project Context
 
 This is a CS Master's research project (DLL course) investigating whether modern activation functions (e.g., SwiGLU, GeGLU, Mish) can improve tabular foundation models like TabPFN compared to the GELU baseline.
@@ -27,7 +57,7 @@ Modern activation functions might yield statistically significant improvements c
 
 - Python 3.11.15 via mise, dependencies managed with uv
 - PyTorch ROCm 7.2 wheel from `https://download.pytorch.org/whl/rocm7.2`
-- Dev tools: pytest, ruff (line-length=120)
+- Dev tools: pytest, pytest-cov, ruff (line-length=120), pyright (basic mode)
 
 ## Evaluation Strategy
 

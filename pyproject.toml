@@ -17,12 +17,22 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=6.0",
     "ruff>=0.12",
 ]
 
 [tool.ruff]
 line-length = 120
 exclude = ["prior.py"]  # upstream nanoTabPFN code, not ours to lint
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]  # no docstrings required in test files
 
 [tool.uv]
 environments = [
@@ -35,3 +45,6 @@ testpaths = ["tests"]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+typeCheckingMode = "basic"
+exclude = ["prior.py"]
+
