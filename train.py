@@ -22,13 +22,13 @@ def set_randomness_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def get_default_device():
+def get_default_device() -> torch.device:
     device = "cpu"
     if torch.backends.mps.is_available():
         device = "mps"
     if torch.cuda.is_available():
         device = "cuda"
-    return device
+    return torch.device(device)
 
 def get_eval_datasets():
     """Returns a list of (X_train, X_test, y_train, y_test) tuples for evaluation."""
@@ -39,10 +39,10 @@ def get_eval_datasets():
 def eval(classifier, datasets=None):
     if datasets is None:
         datasets = get_eval_datasets()
-    scores = {
-        "roc_auc": 0,
-        "acc": 0,
-        "balanced_acc": 0
+    scores: dict[str, float] = {
+        "roc_auc": 0.0,
+        "acc": 0.0,
+        "balanced_acc": 0.0
     }
     for X_train, X_test, y_train, y_test in datasets:
         classifier.fit(X_train, y_train)
@@ -60,7 +60,7 @@ def train(
     model: NanoTabPFNModel,
     prior: DataLoader,
     lr: float = 1e-4,
-    device: torch.device = None,
+    device: torch.device | None = None,
     steps_per_eval=10,
     eval_func=None,
     checkpoint_dir: str | None = None,
@@ -168,7 +168,7 @@ class PriorDumpDataLoader(DataLoader):
         device (torch.device): Device to load tensors onto.
     """
 
-    def __init__(self, filename, num_steps, batch_size, device=None):
+    def __init__(self, filename: str, num_steps: int, batch_size: int, device: torch.device | None = None):
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -177,28 +177,29 @@ class PriorDumpDataLoader(DataLoader):
         if device is None:
             device = get_default_device()
         with h5py.File(self.filename, "r") as f:
-            self.max_num_classes = f["max_num_classes"][0]
+            self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
 
-    def __iter__(self):
+    def __iter__(self):  # pyright: ignore
         with h5py.File(self.filename, "r") as f:
             for _ in range(self.num_steps):
+                assert self.batch_size is not None
                 end = self.pointer + self.batch_size
-                num_features = f["num_features"][self.pointer : end].max()
-                num_datapoints_batch = f["num_datapoints"][self.pointer:end]
-                max_seq_in_batch = int(num_datapoints_batch.max())
-                x = torch.from_numpy(f["X"][self.pointer:end, :max_seq_in_batch, :num_features])
-                y = torch.from_numpy(f["y"][self.pointer:end, :max_seq_in_batch])
-                train_test_split_index = f["single_eval_pos"][self.pointer : end]
+                num_features = f["num_features"][self.pointer : end].max()  # pyright: ignore
+                num_datapoints_batch = f["num_datapoints"][self.pointer:end]  # pyright: ignore
+                max_seq_in_batch = int(num_datapoints_batch.max())  # pyright: ignore
+                x = torch.from_numpy(f["X"][self.pointer:end, :max_seq_in_batch, :num_features])  # pyright: ignore
+                y = torch.from_numpy(f["y"][self.pointer:end, :max_seq_in_batch])  # pyright: ignore
+                train_test_split_index = f["single_eval_pos"][self.pointer : end]  # pyright: ignore
 
                 self.pointer += self.batch_size
-                if self.pointer >= f["X"].shape[0]:
+                if self.pointer >= f["X"].shape[0]:  # pyright: ignore
                     print("""Finished iteration over all stored datasets! """)
                     self.pointer = 0
 
                 yield dict(
                     x=x.to(self.device),
                     y=y.to(self.device),
-                    train_test_split_index=train_test_split_index[0].item(),
+                    train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
                 )
 
     def __len__(self):

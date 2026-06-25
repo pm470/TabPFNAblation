@@ -27,28 +27,31 @@ class TabArenaNanoTabPFNModel(AbstractModel):
         super().__init__(**kwargs)
         self._feature_generator = None
 
-    def _preprocess(self, X: pd.DataFrame, is_train: bool = False, **kwargs) -> np.ndarray:
+    def _preprocess(self, X: pd.DataFrame, is_train: bool = False, **kwargs) -> pd.DataFrame:
         """Model-specific preprocessing: label-encode categoricals, fill NaNs, to float32."""
         X = super()._preprocess(X, **kwargs)
         if is_train:
             self._feature_generator = LabelEncoderFeatureGenerator(verbosity=0)
             self._feature_generator.fit(X=X)
-        if self._feature_generator.features_in:
+        if self._feature_generator is not None and self._feature_generator.features_in:
             X = X.copy()
             X[self._feature_generator.features_in] = self._feature_generator.transform(X=X)
-        return X.fillna(0).to_numpy(dtype=np.float32)
+        return X.fillna(0)
 
-    def _fit(self, X: pd.DataFrame, y: pd.Series, num_cpus: int = 1, **kwargs) -> None:
-        X = self.preprocess(X, y=y, is_train=True)
+    def _fit(self, X: pd.DataFrame, y: pd.Series, *args, **kwargs) -> None:
+        X_df = self.preprocess(X, is_train=True)
+        X_np = X_df.to_numpy(dtype=np.float32)
         # NanoTabPFNClassifier expects numpy arrays
-        y_np = y.to_numpy(dtype=np.int64) if hasattr(y, "to_numpy") else y
+        y_np = np.asarray(y, dtype=np.int64)
 
         # Retrieve the shared instance (hacky but works for in-process runs)
         global _CURRENT_PYTORCH_MODEL
         global _CURRENT_DEVICE
         
+        assert _CURRENT_PYTORCH_MODEL is not None
+        assert _CURRENT_DEVICE is not None
         self.model = NanoTabPFNClassifier(_CURRENT_PYTORCH_MODEL, _CURRENT_DEVICE)
-        self.model.fit(X, y_np)
+        self.model.fit(X_np, y_np)
 
     def _get_default_auxiliary_params(self) -> dict:
         default_auxiliary_params = super()._get_default_auxiliary_params()
@@ -69,8 +72,8 @@ class TabArenaNanoTabPFNModel(AbstractModel):
         )
 
 # Global variables for in-process sharing
-_CURRENT_PYTORCH_MODEL = None
-_CURRENT_DEVICE = None
+_CURRENT_PYTORCH_MODEL: NanoTabPFNModel | None = None
+_CURRENT_DEVICE: torch.device | None = None
 
 def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Path):
     """

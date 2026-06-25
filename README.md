@@ -16,10 +16,13 @@ Download the prior data dump (~990MB) from [figshare](https://figshare.com/s/63f
 ## Usage
 
 ```bash
-# Single experiment
+# Single experiment (fast local breast_cancer eval)
 python run_experiment.py --activation gelu --seed 0
 
-# All seed × activation combos
+# Single experiment with full TabArena evaluation at the end
+python run_experiment.py --activation gelu --seed 0 --benchmark tabarena
+
+# All seed × activation combos (default breast_cancer)
 bash run_all.sh
 
 # Plot results

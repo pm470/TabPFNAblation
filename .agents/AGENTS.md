@@ -13,7 +13,9 @@ Modern activation functions might yield statistically significant improvements c
 - Based on **nanoTabPFN** (<https://github.com/automl/nanoTabPFN>) — a simplified ~500 LOC reimplementation of TabPFNv2.
 - `model.py` and `prior.py` are from upstream nanoTabPFN. `prior.py` is excluded from ruff linting.
 - `train.py` has been enhanced with full seed control, checkpoint saving, and structured JSONL metric logging.
-- `run_experiment.py` is the CLI experiment runner. `run_all.sh` runs all seed × activation combos.
+- `run_experiment.py` is the CLI experiment runner. Uses `--benchmark` flag to switch between fast local and TabArena eval.
+- `tabarena_eval.py` wraps the model for the official TabArena Autogluon benchmark pipeline.
+- `run_all.sh` runs all seed × activation combos.
 - Prior data dump: `300k_150x5_2.h5` (990MB, downloaded from figshare, not committed to git).
 
 ## Hardware
@@ -29,8 +31,8 @@ Modern activation functions might yield statistically significant improvements c
 
 ## Evaluation Strategy
 
-- **Fast local eval:** `sklearn.datasets.load_breast_cancer` — quick sanity check during development (~0.1s)
-- **Full eval (later, on cluster):** TabArena (51 datasets, 9–30 splits each) — the supervisor-recommended benchmark
+- **Fast local eval:** `sklearn.datasets.load_breast_cancer` — quick sanity check during development (`--benchmark breast_cancer`).
+- **Full eval (on cluster):** TabArena benchmark (`--benchmark tabarena`). Currently runs the `lite` subset for testing, can be switched to `full` (51 datasets) in `tabarena_eval.py` when running on the cluster.
 
 ## Key Design Decisions
 
