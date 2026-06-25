@@ -20,9 +20,16 @@ from train import (
 
 
 def parse_args(argv=None):
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Run a single ablation experiment")
     parser.add_argument("--activation", type=str, default="gelu", help="Activation function name (placeholder for now)")
-    parser.add_argument("--benchmark", type=str, choices=["breast_cancer", "tabarena"], default="breast_cancer", help="Benchmark to use for final evaluation")
+    parser.add_argument(
+        "--benchmark",
+        type=str,
+        choices=["breast_cancer", "tabarena"],
+        default="breast_cancer",
+        help="Benchmark to use for final evaluation",
+    )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--num_steps", type=int, default=2500, help="Number of training steps")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
@@ -77,7 +84,7 @@ def run_experiment(args):
         "num_outputs": args.num_outputs,
         "data_file": args.data_file,
         "param_count": param_count,
-        "device": device,
+        "device": str(device),
     }
     config_path = run_dir / "config.json"
     with open(config_path, "w") as f:
@@ -118,15 +125,17 @@ def run_experiment(args):
 
     if args.benchmark == "tabarena":
         from tabarena_eval import run_tabarena_eval
+
         print("Running TabArena final evaluation...")
         run_tabarena_eval(model, device, run_dir)
     else:
-        from train import eval as eval_fn
         from model import NanoTabPFNClassifier
+        from train import eval as eval_fn
+
         classifier = NanoTabPFNClassifier(model, device)
         final_scores = eval_fn(classifier)
         print(f"Final scores: {final_scores}")
-        
+
         # Save final local scores to a separate file so we don't mix them with step metrics
         final_scores_path = run_dir / "final_scores.json"
         with open(final_scores_path, "w") as f:

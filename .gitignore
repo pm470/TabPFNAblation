@@ -25,3 +25,6 @@ final_boxplot.png
 # IDE
 .idea/
 .vscode/
+
+# test coverage
+.coverage

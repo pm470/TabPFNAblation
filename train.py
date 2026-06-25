@@ -1,3 +1,5 @@
+"""Training loops and data loading."""
+
 import os
 import random
 import time
@@ -6,15 +8,17 @@ import h5py
 import numpy as np
 import schedulefree
 import torch
-from model import NanoTabPFNClassifier, NanoTabPFNModel
 from sklearn.datasets import load_breast_cancer
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 
+from model import NanoTabPFNClassifier, NanoTabPFNModel
+
 
 def set_randomness_seed(seed):
+    """Set random seed for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -22,7 +26,9 @@ def set_randomness_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+
 def get_default_device() -> torch.device:
+    """Get default torch device."""
     device = "cpu"
     if torch.backends.mps.is_available():
         device = "mps"
@@ -30,20 +36,19 @@ def get_default_device() -> torch.device:
         device = "cuda"
     return torch.device(device)
 
+
 def get_eval_datasets():
     """Returns a list of (X_train, X_test, y_train, y_test) tuples for evaluation."""
     datasets = []
     datasets.append(train_test_split(*load_breast_cancer(return_X_y=True), test_size=0.5, random_state=0))
     return datasets
 
+
 def eval(classifier, datasets=None):
+    """Evaluate classifier on datasets."""
     if datasets is None:
         datasets = get_eval_datasets()
-    scores: dict[str, float] = {
-        "roc_auc": 0.0,
-        "acc": 0.0,
-        "balanced_acc": 0.0
-    }
+    scores: dict[str, float] = {"roc_auc": 0.0, "acc": 0.0, "balanced_acc": 0.0}
     for X_train, X_test, y_train, y_test in datasets:
         classifier.fit(X_train, y_train)
         prob = classifier.predict_proba(X_test)
@@ -56,6 +61,7 @@ def eval(classifier, datasets=None):
     scores = {k: v / len(datasets) for k, v in scores.items()}
     return scores
 
+
 def train(
     model: NanoTabPFNModel,
     prior: DataLoader,
@@ -66,8 +72,7 @@ def train(
     checkpoint_dir: str | None = None,
     checkpoint_every: int | None = None,
 ):
-    """
-    Trains our model on the given prior using the given criterion.
+    """Trains our model on the given prior using the given criterion.
 
     Args:
         model: (NanoTabPFNModel) our PyTorch model
@@ -94,15 +99,14 @@ def train(
     optimizer.train()
 
     train_time = 0
-    eval_history=[]
+    eval_history = []
     try:
         for step, full_data in enumerate(prior):
             step_start_time = time.time()
             train_test_split_index = full_data["train_test_split_index"]
-            #if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
+            # if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
             #    continue
-            data = (full_data["x"].to(device),
-                    full_data["y"][:, :train_test_split_index].to(device))
+            data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
             output = model(data, train_test_split_index=train_test_split_index)
@@ -115,7 +119,7 @@ def train(
             loss.backward()
             total_loss = loss.cpu().detach().item()
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             optimizer.zero_grad()
             step_train_duration = time.time() - step_start_time
@@ -169,6 +173,7 @@ class PriorDumpDataLoader(DataLoader):
     """
 
     def __init__(self, filename: str, num_steps: int, batch_size: int, device: torch.device | None = None):
+        """Initialize loader."""
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -180,15 +185,16 @@ class PriorDumpDataLoader(DataLoader):
             self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
 
     def __iter__(self):  # pyright: ignore
+        """Yield batches."""
         with h5py.File(self.filename, "r") as f:
             for _ in range(self.num_steps):
                 assert self.batch_size is not None
                 end = self.pointer + self.batch_size
                 num_features = f["num_features"][self.pointer : end].max()  # pyright: ignore
-                num_datapoints_batch = f["num_datapoints"][self.pointer:end]  # pyright: ignore
+                num_datapoints_batch = f["num_datapoints"][self.pointer : end]  # pyright: ignore
                 max_seq_in_batch = int(num_datapoints_batch.max())  # pyright: ignore
-                x = torch.from_numpy(f["X"][self.pointer:end, :max_seq_in_batch, :num_features])  # pyright: ignore
-                y = torch.from_numpy(f["y"][self.pointer:end, :max_seq_in_batch])  # pyright: ignore
+                x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])  # pyright: ignore
+                y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])  # pyright: ignore
                 train_test_split_index = f["single_eval_pos"][self.pointer : end]  # pyright: ignore
 
                 self.pointer += self.batch_size
@@ -203,7 +209,9 @@ class PriorDumpDataLoader(DataLoader):
                 )
 
     def __len__(self):
+        """Return number of steps."""
         return self.num_steps
+
 
 if __name__ == "__main__":
     set_randomness_seed(0)

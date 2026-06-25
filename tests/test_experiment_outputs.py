@@ -24,14 +24,22 @@ def cleanup_test_outputs():
 
 def run_short_experiment(seed=0, num_steps=10, eval_every=5, checkpoint_every=5):
     """Helper to run a short experiment for testing."""
-    args = parse_args([
-        "--seed", str(seed),
-        "--num_steps", str(num_steps),
-        "--eval_every", str(eval_every),
-        "--checkpoint_every", str(checkpoint_every),
-        "--output_dir", str(TEST_OUTPUT_DIR),
-        "--activation", "gelu",
-    ])
+    args = parse_args(
+        [
+            "--seed",
+            str(seed),
+            "--num_steps",
+            str(num_steps),
+            "--eval_every",
+            str(eval_every),
+            "--checkpoint_every",
+            str(checkpoint_every),
+            "--output_dir",
+            str(TEST_OUTPUT_DIR),
+            "--activation",
+            "gelu",
+        ]
+    )
     return run_experiment(args)
 
 
@@ -97,7 +105,9 @@ def test_checkpoints_created():
 
     # Should have step_00005.pt, step_00010.pt, and final.pt
     checkpoint_files = list(checkpoint_dir.glob("*.pt"))
-    assert len(checkpoint_files) >= 2, f"Expected at least 2 checkpoints, got {len(checkpoint_files)}: {checkpoint_files}"
+    assert len(checkpoint_files) >= 2, (
+        f"Expected at least 2 checkpoints, got {len(checkpoint_files)}: {checkpoint_files}"
+    )
 
     # final.pt must exist
     final_path = checkpoint_dir / "final.pt"

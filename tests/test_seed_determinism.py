@@ -24,14 +24,22 @@ def cleanup_test_outputs():
 def run_and_collect_losses(seed, run_id):
     """Run an experiment and return the loss sequence."""
     output_dir = TEST_OUTPUT_DIR / f"run_{run_id}"
-    args = parse_args([
-        "--seed", str(seed),
-        "--num_steps", "10",
-        "--eval_every", "5",
-        "--checkpoint_every", "0",
-        "--output_dir", str(output_dir),
-        "--activation", "gelu",
-    ])
+    args = parse_args(
+        [
+            "--seed",
+            str(seed),
+            "--num_steps",
+            "10",
+            "--eval_every",
+            "5",
+            "--checkpoint_every",
+            "0",
+            "--output_dir",
+            str(output_dir),
+            "--activation",
+            "gelu",
+        ]
+    )
     run_experiment(args)
 
     metrics_path = output_dir / "gelu" / f"seed_{seed}" / "metrics.jsonl"
@@ -49,7 +57,7 @@ def test_same_seed_produces_identical_losses():
     losses_b = run_and_collect_losses(seed=42, run_id="b")
 
     assert len(losses_a) == len(losses_b), "Different number of eval steps"
-    for i, (a, b) in enumerate(zip(losses_a, losses_b)):
+    for i, (a, b) in enumerate(zip(losses_a, losses_b, strict=False)):
         assert a == b, f"Loss mismatch at eval step {i}: {a} != {b}"
 
 
@@ -59,4 +67,4 @@ def test_different_seeds_produce_different_losses():
     losses_b = run_and_collect_losses(seed=1, run_id="b")
 
     # At least some losses should differ
-    assert any(a != b for a, b in zip(losses_a, losses_b)), "Different seeds produced identical losses"
+    assert any(a != b for a, b in zip(losses_a, losses_b, strict=False)), "Different seeds produced identical losses"

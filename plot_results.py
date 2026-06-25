@@ -99,7 +99,7 @@ def plot_final_boxplot(all_results: dict[str, list[list[dict]]], output_path: st
 
     # Color the boxes
     colors = sns.color_palette("husl", len(labels))
-    for patch, color in zip(bp["boxes"], colors):
+    for patch, color in zip(bp["boxes"], colors, strict=False):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
 

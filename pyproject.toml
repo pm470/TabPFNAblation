@@ -27,6 +27,9 @@ exclude = ["prior.py"]  # upstream nanoTabPFN code, not ours to lint
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N", "D"]
+# N803, N806: Allow uppercase variables (e.g., X_train) per standard ML conventions.
+# N812: Allow `import torch.nn.functional as F` which is standard in PyTorch.
+ignore = ["N803", "N806", "N812"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -46,5 +49,5 @@ testpaths = ["tests"]
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "basic"
-exclude = ["prior.py"]
+exclude = ["prior.py", ".venv"]
 
