@@ -35,17 +35,15 @@ As a researcher, I want to evaluate my trained model on the TabArena benchmark s
 - [x] AC-14: Uses `TabArenaContext` to build and run evaluation jobs.
 - [x] AC-15: Results directory is `run_dir / "tabarena_exp"`.
 - [x] AC-16: Uses `subset="full"` in `build_and_run_jobs`.
-- [x] AC-17: Limits evaluation to a single dataset `["blood-transfusion-service-center"]` via `build_kwargs.dataset_names`.
-- [x] AC-18: Runs with `debug_mode=True` (required for the global variable sharing pattern).
-- [x] AC-19: Sets `new_result_prefix="[New] "` for result labeling.
+- [x] AC-17: Runs with `debug_mode=True` (required for the global variable sharing pattern).
+- [x] AC-18: Sets `new_result_prefix="[New] "` for result labeling.
 
 ### Global Model Sharing
 
-- [x] AC-20: Module-level variables `_CURRENT_PYTORCH_MODEL` and `_CURRENT_DEVICE` are initialized to `None`.
-- [x] AC-21: `run_tabarena_eval` sets these globals before building experiments so that `_fit` can access the pre-trained model.
+- [x] AC-19: Module-level variables `_CURRENT_PYTORCH_MODEL` and `_CURRENT_DEVICE` are initialized to `None`.
+- [x] AC-20: `run_tabarena_eval` sets these globals before building experiments so that `_fit` can access the pre-trained model.
 
 ## Notes
 
 - The global variable pattern (`_CURRENT_PYTORCH_MODEL` / `_CURRENT_DEVICE`) is a deliberate hack to pass the pre-trained PyTorch model into the AutoGluon `AbstractModel._fit` method, which doesn't support custom constructor arguments. This only works with `debug_mode=True` (in-process execution).
-- Currently limited to a single test dataset (`blood-transfusion-service-center`) for development. The full TabArena benchmark (51 datasets) will be run on the cluster.
 - `_preprocess` makes a copy of `X` before label encoding to avoid mutating the input DataFrame.

@@ -56,3 +56,26 @@ def test_model_param_count():
     model = make_model()
     param_count = sum(p.numel() for p in model.parameters())
     assert param_count == 356_066, f"Expected 356,066 parameters, got {param_count:,}"
+
+
+def test_classifier_predict():
+    """NanoTabPFNClassifier.predict returns class labels via argmax."""
+    import numpy as np
+
+    from model import NanoTabPFNClassifier
+
+    model = make_model()
+    classifier = NanoTabPFNClassifier(model, torch.device("cpu"))
+
+    # Dummy data
+    X_train = np.random.randn(10, 5)
+    y_train = np.random.randint(0, 2, (10,))
+    X_test = np.random.randn(5, 5)
+
+    classifier.fit(X_train, y_train)
+    predictions = classifier.predict(X_test)
+
+    assert isinstance(predictions, np.ndarray)
+    assert predictions.shape == (5,)
+    assert predictions.dtype == np.int64 or predictions.dtype == np.int32
+    assert set(predictions).issubset({0, 1})

@@ -2,9 +2,16 @@
 
 ## Spec-Driven Testing
 
-- Tests are derived from **acceptance criteria in spec files**, NEVER from implementation details
-- Each acceptance criterion must map to at least one test assertion
-- If a spec criterion lacks test coverage, that is a bug in the test suite
+The project divides its components into two categories for testing: **Core** (model architecture, training loop, seed determinism) and **Non-Core** (plotting, CLI, evaluation wrappers).
+
+### Core Components
+- Tests are derived from **acceptance criteria in spec files**, NEVER from implementation details.
+- Each acceptance criterion for a core component must explicitly map to at least one test assertion.
+- If a core spec criterion lacks test coverage, that is a bug in the test suite. We do not enforce a strict coverage percentage, but all core ACs must be covered.
+
+### Non-Core Components
+- We do NOT require strict test mapping for non-core components. 100% test coverage is unrealistic and overkill for these scripts.
+- Acceptance criteria for non-core components can be checked off via manual verification or implicitly through end-to-end execution.
 
 ## Test Organization
 

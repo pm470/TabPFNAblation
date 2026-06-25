@@ -105,7 +105,6 @@ def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Pat
         experiments,
         expname=results_dir,
         subset="full",
-        build_kwargs={"dataset_names": ["blood-transfusion-service-center"]},  # test on a single classification dataset
         new_result_prefix="[New] ",
         debug_mode=True,  # In-process debugging required for our global variable hack
     )
