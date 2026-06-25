@@ -104,7 +104,7 @@ def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Pat
     context.build_and_run_jobs(
         experiments,
         expname=results_dir,
-        subset="full",
+        subset="classification",
         new_result_prefix="[New] ",
         debug_mode=True,  # In-process debugging required for our global variable hack
     )

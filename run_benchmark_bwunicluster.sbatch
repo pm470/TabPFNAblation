@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --time=24:00:00
+#SBATCH --time=4:00:00
 #SBATCH --partition=gpu_a100_il
 #SBATCH --gres=gpu:1
 
@@ -21,11 +21,10 @@ echo "GPUs: $CUDA_VISIBLE_DEVICES"
 cd $SLURM_SUBMIT_DIR
 
 # Install uv if it's not installed in the cluster home directory
-if ! command -v uv &> /dev/null
-then
-    echo "uv not found, installing..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.local/bin/env
+if ! command -v uv &>/dev/null; then
+  echo "uv not found, installing..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  source $HOME/.local/bin/env
 fi
 
 # Run the experiment using uv to manage dependencies and python version

@@ -63,7 +63,7 @@ Modern activation functions might yield statistically significant improvements c
 ## Evaluation Strategy
 
 - **Fast local eval:** `sklearn.datasets.load_breast_cancer` — quick sanity check during development (`--benchmark breast_cancer`).
-- **Full eval (on cluster):** TabArena benchmark (`--benchmark tabarena`). Currently runs the `lite` subset for testing, can be switched to `full` (51 datasets) in `tabarena_eval.py` when running on the cluster.
+- **Full eval (on cluster):** TabArena benchmark (`--benchmark tabarena`). Currently runs the `lite` subset for testing, can be switched to `classification` (all classification datasets) in `tabarena_eval.py` when running on the cluster.
 
 ## Key Design Decisions
 
