@@ -4,14 +4,20 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import LayerNorm, Linear, MultiheadAttention
+from torch.nn import LayerNorm, MultiheadAttention
 
 
 class NanoTabPFNModel(nn.Module):
     """Core TabPFN Model."""
 
     def __init__(
-        self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int
+        self,
+        embedding_size: int,
+        num_attention_heads: int,
+        mlp_hidden_size: int,
+        num_layers: int,
+        num_outputs: int,
+        activation: str = "gelu",
     ):
         """Initializes the feature/target encoder, transformer stack and decoder."""
         super().__init__()
@@ -20,9 +26,9 @@ class NanoTabPFNModel(nn.Module):
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
             self.transformer_blocks.append(
-                TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size)
+                TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size, activation=activation)
             )
-        self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
+        self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs, activation=activation)
 
     def forward(self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int) -> torch.Tensor:
         """Forward pass for the model."""
@@ -114,6 +120,7 @@ class TransformerEncoderLayer(nn.Module):
         embedding_size: int,
         nhead: int,
         mlp_hidden_size: int,
+        activation: str = "gelu",
         layer_norm_eps: float = 1e-5,
         batch_first: bool = True,
         device=None,
@@ -128,8 +135,9 @@ class TransformerEncoderLayer(nn.Module):
             embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype
         )
 
-        self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
-        self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
+        self.mlp = create_mlp(
+            embedding_size, mlp_hidden_size, embedding_size, activation=activation, device=device, dtype=dtype
+        )
 
         self.norm1 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
@@ -170,19 +178,91 @@ class TransformerEncoderLayer(nn.Module):
         src = src.transpose(2, 1)
         src = self.norm2(src)
         # MLP after attention
-        src = self.linear2(F.gelu(self.linear1(src))) + src
+        src = self.mlp(src) + src
         src = self.norm3(src)
         return src
+
+
+def create_mlp(
+    in_features: int, hidden_features: int, out_features: int, activation: str = "gelu", device=None, dtype=None
+) -> nn.Module:
+    """Factory function to create the appropriate MLP based on the activation type."""
+    activation_name = activation.lower()
+    if activation_name in ["swiglu", "geglu", "reglu"]:
+        return GatedMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
+    return StandardMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
+
+
+class StandardMLP(nn.Module):
+    """Standard 2-layer MLP."""
+
+    def __init__(
+        self, in_features: int, hidden_features: int, out_features: int, activation: str, device=None, dtype=None
+    ):
+        """Initializes the standard MLP layers."""
+        super().__init__()
+        self.activation_name = activation
+        self.linear1 = nn.Linear(in_features, hidden_features, device=device, dtype=dtype)
+        self.linear2 = nn.Linear(hidden_features, out_features, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Applies the MLP and standard activation function."""
+        h = self.linear1(x)
+        if self.activation_name == "gelu":
+            h = F.gelu(h)
+        elif self.activation_name == "relu":
+            h = F.relu(h)
+        elif self.activation_name in ["silu", "swish"]:
+            h = F.silu(h)
+        elif self.activation_name == "mish":
+            h = F.mish(h)
+        else:
+            raise ValueError(f"Unsupported standard activation: {self.activation_name}")
+        return self.linear2(h)
+
+
+class GatedMLP(nn.Module):
+    """Dynamically sizes hidden dimensions to maintain parameter count across activations."""
+
+    def __init__(
+        self, in_features: int, hidden_features: int, out_features: int, activation: str, device=None, dtype=None
+    ):
+        """Initializes the gated MLP layers."""
+        super().__init__()
+        self.activation_name = activation
+
+        # Baseline params (excluding out bias): in*H + H + H*out
+        # Gated params (excluding out bias): 2*(in*H_new + H_new) + H_new*out
+        target_params = hidden_features * (in_features + 1 + out_features)
+        gated_divisor = 2 * in_features + 2 + out_features
+        self.hidden_features = round(target_params / gated_divisor)
+
+        self.linear_gate = nn.Linear(in_features, self.hidden_features, device=device, dtype=dtype)
+        self.linear_up = nn.Linear(in_features, self.hidden_features, device=device, dtype=dtype)
+        self.linear_down = nn.Linear(self.hidden_features, out_features, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Applies the MLP and gated activation function."""
+        gate = self.linear_gate(x)
+        up = self.linear_up(x)
+        if self.activation_name == "swiglu":
+            gate = F.silu(gate)
+        elif self.activation_name == "geglu":
+            gate = F.gelu(gate)
+        elif self.activation_name == "reglu":
+            gate = F.relu(gate)
+        else:
+            raise ValueError(f"Unsupported gated activation: {self.activation_name}")
+        return self.linear_down(gate * up)
 
 
 class Decoder(nn.Module):
     """Decodes embeddings into logits."""
 
-    def __init__(self, embedding_size: int, mlp_hidden_size: int, num_outputs: int):
+    def __init__(self, embedding_size: int, mlp_hidden_size: int, num_outputs: int, activation: str = "gelu"):
         """Initializes the linear layers for use in the forward."""
         super().__init__()
-        self.linear1 = nn.Linear(embedding_size, mlp_hidden_size)
-        self.linear2 = nn.Linear(mlp_hidden_size, num_outputs)
+        self.mlp = create_mlp(embedding_size, mlp_hidden_size, num_outputs, activation=activation)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Applies an MLP to the embeddings to get the logits.
@@ -193,7 +273,7 @@ class Decoder(nn.Module):
         Returns:
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_outputs)
         """
-        return self.linear2(F.gelu(self.linear1(x)))
+        return self.mlp(x)
 
 
 class NanoTabPFNClassifier:
@@ -213,20 +293,53 @@ class NanoTabPFNClassifier:
     def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
         """Creates (x,y), runs it through our PyTorch Model.
 
+        Subsamples training data and chunks test data to avoid OOM.
         Cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities.
         """
-        x = np.concatenate((self.X_train, X_test))
-        y = self.y_train
-        with torch.no_grad():
-            x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)  # introduce batch size 1
-            y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model((x, y), train_test_split_index=len(self.X_train)).squeeze(0)  # remove batch size 1
-            # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
-            out = out[:, : self.num_classes]
-            # apply softmax to get a probability distribution
-            probabilities = F.softmax(out, dim=1)
-            return probabilities.to("cpu").numpy()
+        # Safe limits for an 80GB A100 GPU
+        max_train_samples = 20000
+        max_total_samples = 25000
+        
+        # 1. Subsample training context if it's too large
+        if len(self.X_train) > max_train_samples:
+            # Use a fixed seed for reproducibility across chunks
+            rng = np.random.default_rng(42)
+            indices = rng.choice(len(self.X_train), max_train_samples, replace=False)
+            X_train_sub = self.X_train[indices]
+            y_train_sub = self.y_train[indices]
+            print(f"[NanoTabPFN] Subsampled training context from {len(self.X_train)} to {max_train_samples} rows.")
+        else:
+            X_train_sub = self.X_train
+            y_train_sub = self.y_train
+            
+        # 2. Chunk test data so (train + test) doesn't exceed max_total_samples
+        max_test_chunk = max_total_samples - len(X_train_sub)
+        # Fallback in case max_test_chunk is very small or negative (shouldn't happen with these limits)
+        max_test_chunk = max(100, max_test_chunk)
+        
+        if len(X_test) > max_test_chunk:
+            print(f"[NanoTabPFN] Chunking test set of size {len(X_test)} into chunks of max {max_test_chunk} rows to prevent OOM.")
+            
+        all_probs = []
+        for i in range(0, len(X_test), max_test_chunk):
+            X_test_chunk = X_test[i:i + max_test_chunk]
+            x = np.concatenate((X_train_sub, X_test_chunk))
+            y = y_train_sub
+            
+            with torch.no_grad():
+                x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
+                out = out[:, : self.num_classes]
+                probs = F.softmax(out, dim=1).cpu().numpy()
+                all_probs.append(probs)
+                
+        if self.device.type == "cuda":
+            peak_mem_gb = torch.cuda.max_memory_allocated(self.device) / (1024**3)
+            print(f"[NanoTabPFN] Peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+            
+        return np.concatenate(all_probs, axis=0)
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """Predict class labels."""

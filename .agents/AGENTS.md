@@ -12,7 +12,7 @@ Every code change must follow this process. Do not skip steps.
    - Architecture or module changes → read `.agents/harness/architecture.md`
    - Writing or modifying tests → read `.agents/harness/testing.md`
    - Experiment design or running experiments → read `.agents/harness/research_methodology.md`
-3. **Check the relevant spec** in `specs/` — understand the acceptance criteria for the code being changed. If no spec exists, write one first with `status: new`.
+3. **Check/Draft the relevant spec** in `specs/` — understand the acceptance criteria for the code being changed. **CRITICAL:** If no spec exists, or if an existing spec needs to be updated to cover new requirements, you MUST write or update the spec *first* (with `status: new` or `status: edited`) before writing any code.
 4. **Implement** the change. If writing new functionality, write tests first (derived from acceptance criteria, not from implementation).
 5. **Run verification**: `bash scripts/verify.sh` — fix ALL failures before considering the task done.
 6. **Sync the spec**: update the corresponding spec file to reflect the current behavior. Set `status: implemented` and `last_synced` to today's date.

@@ -64,6 +64,7 @@ def run_experiment(args):
         mlp_hidden_size=args.mlp_hidden_size,
         num_layers=args.num_layers,
         num_outputs=args.num_outputs,
+        activation=args.activation,
     )
 
     # Save config

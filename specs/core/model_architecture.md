@@ -16,7 +16,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 
 ### NanoTabPFNModel
 
-- [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, and `num_outputs` as parameters.
+- [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, and `activation` (default `"gelu"`) as parameters.
 - [x] AC-2: The model contains a `FeatureEncoder`, a `TargetEncoder`, a `nn.ModuleList` of `TransformerEncoderLayer` blocks (length `num_layers`), and a `Decoder`.
 - [x] AC-3: Forward pass accepts a tuple `(x_src, y_src)` and an integer `train_test_split_index`.
 - [x] AC-4: If `y_src` has fewer dimensions than `x_src`, an extra trailing dimension is added via `unsqueeze(-1)`.
@@ -25,6 +25,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 - [x] AC-7: After the transformer stack, only test-row target embeddings are selected: `src_tensor[:, train_test_split_index:, -1, :]`.
 - [x] AC-8: Output shape is `(batch_size, num_test_rows, num_outputs)` where `num_test_rows = num_rows - train_test_split_index`.
 - [x] AC-9: With default config (embedding_size=96, heads=4, mlp_hidden=192, layers=3, outputs=2) the model has exactly 356,066 parameters.
+- [x] AC-9.1: Gated activations dynamically adjust their inner dimension size to maintain a parameter count as close as possible to the baseline.
 
 ### FeatureEncoder
 
@@ -44,18 +45,18 @@ As a researcher, I want a compact tabular foundation model that encodes features
 ### TransformerEncoderLayer
 
 - [x] AC-19: Contains two separate `MultiheadAttention` modules: one for attention between features (columns) and one for attention between datapoints (rows).
-- [x] AC-20: Contains a 2-layer MLP (`Linear(E, H)` → GELU → `Linear(H, E)`) with residual connection.
+- [x] AC-20: Contains a dynamically sized MLP (created via `create_mlp` returning `StandardMLP` or `GatedMLP`) with residual connection.
 - [x] AC-21: Contains three `LayerNorm` layers (one after each of: feature attention, datapoint attention, MLP).
 - [x] AC-22: Feature attention reshapes `(B, R, C, E)` → `(B*R, C, E)` so attention operates across columns per row.
 - [x] AC-23: Datapoint attention transposes dims 1 and 2, then reshapes to `(B*C, R, E)` so attention operates across rows per column.
 - [x] AC-24: Training rows attend only to themselves: `self_attention(src[:, :split], src[:, :split], src[:, :split])`.
 - [x] AC-25: Test rows attend only to training rows: `self_attention(src[:, split:], src[:, :split], src[:, :split])`.
 - [x] AC-26: Both attention outputs are concatenated and a residual connection is added from the pre-attention tensor.
-- [x] AC-27: The MLP activation function is GELU (`F.gelu`).
+- [x] AC-27: The MLP supports standard activations (GELU, ReLU, SiLU/Swish, Mish) and gated variants (SwiGLU, GeGLU, ReGLU).
 
 ### Decoder
 
-- [x] AC-28: 2-layer MLP: `Linear(embedding_size, mlp_hidden_size)` → GELU → `Linear(mlp_hidden_size, num_outputs)`.
+- [x] AC-28: Uses the dynamically sized MLP (created via `create_mlp`) configured for `num_outputs`.
 - [x] AC-29: No residual connection in the decoder.
 - [x] AC-30: Input `(B, R, E)` produces output `(B, R, num_outputs)`.
 

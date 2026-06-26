@@ -11,7 +11,8 @@ dependencies = [
     "seaborn>=0.13",
     "openml>=0.14",
     "matplotlib>=3.8",
-    "tabarena @ git+https://github.com/autogluon/tabarena.git#subdirectory=packages/tabarena",
+    "autogluon-tabular==1.5.1b20260626",
+    "tabarena @ git+https://github.com/autogluon/tabarena.git@bdc1c82ee468f111a8100bc0f57767fb0150c980#subdirectory=packages/tabarena",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ convention = "google"
 "tests/*" = ["D"]  # no docstrings required in test files
 
 [tool.uv]
+prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
 ]
