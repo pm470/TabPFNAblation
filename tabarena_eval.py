@@ -56,6 +56,13 @@ class TabArenaNanoTabPFNModel(AbstractModel):
         self.model = NanoTabPFNClassifier(_CURRENT_PYTORCH_MODEL, _CURRENT_DEVICE, n_ensemble=8)
         self.model.fit(X_np, y_np)
 
+    def _predict_proba(self, X, **kwargs):
+        """Override to ensure X is a numpy array before passing to the classifier."""
+        # AutoGluon's predict_proba already calls self.preprocess, so X is preprocessed
+        X_np = X.to_numpy(dtype=np.float32)
+        probs = self.model.predict_proba(X_np)
+        return probs
+
     def predict_proba(self, X, **kwargs):
         """Override to print peak memory allocated once per dataset."""
         probs = super().predict_proba(X, **kwargs)
