@@ -11,7 +11,7 @@ from pathlib import Path
 
 from model import NanoTabPFNModel
 from train import (
-    PriorDumpDataLoader,
+    NanopriorDataset,
     eval,
     get_default_device,
     set_randomness_seed,
@@ -37,12 +37,14 @@ def parse_args(argv=None):
     parser.add_argument("--eval_every", type=int, default=25, help="Evaluate every N steps")
     parser.add_argument("--checkpoint_every", type=int, default=250, help="Save checkpoint every N steps")
     parser.add_argument("--output_dir", type=str, default="results", help="Base output directory")
-    parser.add_argument("--data_file", type=str, default="300k_150x5_2.h5", help="Path to prior data dump")
+    parser.add_argument("--max_seq_len", type=int, default=1000, help="Maximum number of rows per dataset")
+    parser.add_argument("--max_features", type=int, default=60, help="Maximum number of features per dataset")
+    parser.add_argument("--max_classes", type=int, default=10, help="Maximum number of classes per dataset")
     parser.add_argument("--embedding_size", type=int, default=96, help="Embedding size")
     parser.add_argument("--num_attention_heads", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
-    parser.add_argument("--num_outputs", type=int, default=2, help="Number of output classes")
+    parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
     return parser.parse_args(argv)
 
 
@@ -83,7 +85,9 @@ def run_experiment(args):
         "mlp_hidden_size": args.mlp_hidden_size,
         "num_layers": args.num_layers,
         "num_outputs": args.num_outputs,
-        "data_file": args.data_file,
+        "max_seq_len": args.max_seq_len,
+        "max_features": args.max_features,
+        "max_classes": args.max_classes,
         "param_count": param_count,
         "device": str(device),
     }
@@ -94,12 +98,17 @@ def run_experiment(args):
     print(f"Model parameters: {param_count:,}")
 
     # Create dataloader
-    prior = PriorDumpDataLoader(
-        args.data_file,
+    from torch.utils.data import DataLoader
+    dataset = NanopriorDataset(
         num_steps=args.num_steps,
         batch_size=args.batch_size,
+        max_seq_len=args.max_seq_len,
+        max_features=args.max_features,
+        max_classes=args.max_classes,
         device=device,
     )
+    # Using 0 workers for safety/compatibility; increase if CPU allows.
+    prior = DataLoader(dataset, batch_size=None, num_workers=0)
 
     # Train
     model, eval_history = train(

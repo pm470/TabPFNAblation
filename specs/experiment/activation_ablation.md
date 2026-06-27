@@ -3,7 +3,7 @@ id: EXP-001
 title: "Activation Ablation Experiment Runner"
 status: implemented
 module: run_experiment.py
-last_synced: 2026-06-25
+last_synced: 2026-06-28
 ---
 
 # Activation Ablation Experiment Runner
@@ -25,8 +25,8 @@ As a researcher, I want a CLI tool that runs a single ablation experiment with a
 - [x] AC-7: `--eval_every` (int, default `25`) — evaluation interval in steps.
 - [x] AC-8: `--checkpoint_every` (int, default `250`) — checkpoint save interval in steps.
 - [x] AC-9: `--output_dir` (str, default `"results"`) — base output directory.
-- [x] AC-10: `--data_file` (str, default `"300k_150x5_2.h5"`) — path to HDF5 prior data dump.
-- [x] AC-11: Model architecture args: `--embedding_size` (96), `--num_attention_heads` (4), `--mlp_hidden_size` (192), `--num_layers` (3), `--num_outputs` (2).
+- [x] AC-10: Dataset args: `--max_seq_len` (1000), `--max_features` (60), `--max_classes` (10).
+- [x] AC-11: Model architecture args: `--embedding_size` (96), `--num_attention_heads` (4), `--mlp_hidden_size` (192), `--num_layers` (3), `--num_outputs` (10).
 
 ### Output Directory Structure
 
@@ -38,7 +38,7 @@ As a researcher, I want a CLI tool that runs a single ablation experiment with a
 
 - [x] AC-15: `config.json` is saved in the run directory before training starts.
 - [x] AC-16: Config contains all CLI args plus computed `param_count` and `device`.
-- [x] AC-17: Config keys include: `activation`, `benchmark`, `seed`, `num_steps`, `batch_size`, `lr`, `eval_every`, `checkpoint_every`, `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, `data_file`, `param_count`, `device`.
+- [x] AC-17: Config keys include: `activation`, `benchmark`, `seed`, `num_steps`, `batch_size`, `lr`, `eval_every`, `checkpoint_every`, `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, `max_seq_len`, `max_features`, `max_classes`, `param_count`, `device`.
 - [x] AC-18: Config is written with `json.dump` using `indent=2`.
 
 ### Training
