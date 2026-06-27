@@ -136,6 +136,9 @@ def run_experiment(args):
         classifier = NanoTabPFNClassifier(model, device)
         final_scores = eval_fn(classifier)
         print(f"Final scores: {final_scores}")
+        if device.type == "cuda":
+            peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
+            print(f"[NanoTabPFN] Peak GPU memory allocated for benchmark breast_cancer: {peak_mem_gb:.2f} GB")
 
         # Save final local scores to a separate file so we don't mix them with step metrics
         final_scores_path = run_dir / "final_scores.json"

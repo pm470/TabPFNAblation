@@ -3,6 +3,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.nn import LayerNorm, MultiheadAttention
 
@@ -279,10 +280,20 @@ class Decoder(nn.Module):
 class NanoTabPFNClassifier:
     """scikit-learn like interface."""
 
-    def __init__(self, model: NanoTabPFNModel, device: torch.device):
+    def __init__(
+        self,
+        model: NanoTabPFNModel,
+        device: torch.device,
+        max_train_samples: int | None = None,
+        max_total_samples: int | None = None,
+        n_ensemble: int = 1,
+    ):
         """Initialize classifier."""
         self.model = model.to(device)
         self.device = device
+        self.max_train_samples = max_train_samples
+        self.max_total_samples = max_total_samples
+        self.n_ensemble = n_ensemble
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """Stores X_train and y_train for later use, also computes the highest class number occuring in num_classes."""
@@ -297,49 +308,80 @@ class NanoTabPFNClassifier:
         Cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities.
         """
-        # Safe limits for an 80GB A100 GPU
-        max_train_samples = 20000
-        max_total_samples = 25000
-        
-        # 1. Subsample training context if it's too large
-        if len(self.X_train) > max_train_samples:
-            # Use a fixed seed for reproducibility across chunks
-            rng = np.random.default_rng(42)
-            indices = rng.choice(len(self.X_train), max_train_samples, replace=False)
-            X_train_sub = self.X_train[indices]
-            y_train_sub = self.y_train[indices]
-            print(f"[NanoTabPFN] Subsampled training context from {len(self.X_train)} to {max_train_samples} rows.")
+        # Determine limits based on feature count to avoid quadratic memory OOM in attention
+        if self.max_train_samples is not None and self.max_total_samples is not None:
+            max_train_samples = self.max_train_samples
+            max_total_samples = self.max_total_samples
         else:
-            X_train_sub = self.X_train
-            y_train_sub = self.y_train
-            
-        # 2. Chunk test data so (train + test) doesn't exceed max_total_samples
-        max_test_chunk = max_total_samples - len(X_train_sub)
-        # Fallback in case max_test_chunk is very small or negative (shouldn't happen with these limits)
+            num_features = self.X_train.shape[1]
+            col_size = num_features + 1
+            num_heads = 4
+            if len(self.model.transformer_blocks) > 0:
+                num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads
+
+            # Target peak memory of 8.0 GiB for the attention weights tensor.
+            # The actual peak is ~2x this (scores + softmax output coexist briefly),
+            # so this targets ~16 GiB peak — safe for 48+ GB GPUs.
+            # Memory per attention = col_size * num_heads * (seq_len ** 2) * 4 bytes
+            max_attn_bytes = 8.0 * (1024 ** 3)
+            max_seq_len = int(np.sqrt(max_attn_bytes / (col_size * num_heads * 4)))
+
+            # Clip max_seq_len to a reasonable range [1000, 10000]
+            max_seq_len = max(1000, min(10000, max_seq_len))
+
+            max_train_samples = max_seq_len
+            max_total_samples = int(max_seq_len * 1.25)
+
+        # 1. Chunk test data
+        max_test_chunk = max_total_samples - min(len(self.X_train), max_train_samples)
+        # Fallback in case max_test_chunk is very small or negative
         max_test_chunk = max(100, max_test_chunk)
-        
-        if len(X_test) > max_test_chunk:
-            print(f"[NanoTabPFN] Chunking test set of size {len(X_test)} into chunks of max {max_test_chunk} rows to prevent OOM.")
+
+        all_ensemble_probs = []
+        # If the dataset is small enough, no subsampling is needed.
+        # Since nanoTabPFN does not yet do feature/label permutations, running 
+        # multiple identical ensembles would be a waste of compute.
+        actual_ensemble_size = self.n_ensemble if len(self.X_train) > max_train_samples else 1
+
+        for ensemble_idx in range(actual_ensemble_size):
+            if len(self.X_train) > max_train_samples:
+                # 2. Stratified subsample training context if it's too large
+                try:
+                    X_train_sub, _, y_train_sub, _ = train_test_split(
+                        self.X_train, self.y_train, train_size=max_train_samples,
+                        stratify=self.y_train, random_state=42 + ensemble_idx
+                    )
+                except ValueError:
+                    # Fallback to purely random subset if a class has too few samples to stratify
+                    rng = np.random.default_rng(42 + ensemble_idx)
+                    indices = rng.choice(len(self.X_train), max_train_samples, replace=False)
+                    X_train_sub = self.X_train[indices]
+                    y_train_sub = self.y_train[indices]
+            else:
+                X_train_sub = self.X_train
+                y_train_sub = self.y_train
+
+            all_probs = []
+            for i in range(0, len(X_test), max_test_chunk):
+                X_test_chunk = X_test[i:i + max_test_chunk]
+                x = np.concatenate((X_train_sub, X_test_chunk))
+                y = y_train_sub
+
+                # Use autocast for mixed precision (saves memory, allows larger context)
+                device_type = self.device.type if self.device.type != "mps" else "cpu"
+                with torch.no_grad(), torch.autocast(device_type=device_type, dtype=torch.float16, enabled=self.device.type != "cpu"):
+                    x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                    y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                    out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
+                    out = out[:, : self.num_classes]
+                    # Compute probabilities in float32 for stability
+                    probs = F.softmax(out.to(torch.float32), dim=1).cpu().numpy()
+                    all_probs.append(probs)
             
-        all_probs = []
-        for i in range(0, len(X_test), max_test_chunk):
-            X_test_chunk = X_test[i:i + max_test_chunk]
-            x = np.concatenate((X_train_sub, X_test_chunk))
-            y = y_train_sub
-            
-            with torch.no_grad():
-                x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
-                y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-                out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
-                out = out[:, : self.num_classes]
-                probs = F.softmax(out, dim=1).cpu().numpy()
-                all_probs.append(probs)
-                
-        if self.device.type == "cuda":
-            peak_mem_gb = torch.cuda.max_memory_allocated(self.device) / (1024**3)
-            print(f"[NanoTabPFN] Peak GPU memory allocated: {peak_mem_gb:.2f} GB")
-            
-        return np.concatenate(all_probs, axis=0)
+            all_ensemble_probs.append(np.concatenate(all_probs, axis=0))
+
+        # Average probabilities across all ensemble members
+        return np.mean(all_ensemble_probs, axis=0)
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """Predict class labels."""

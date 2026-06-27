@@ -159,6 +159,10 @@ def train(
         final_path = os.path.join(checkpoint_dir, "final.pt")
         torch.save(model.state_dict(), final_path)
 
+    if device.type == "cuda":
+        peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
+        print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+
     return model, eval_history
 
 

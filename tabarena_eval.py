@@ -53,8 +53,36 @@ class TabArenaNanoTabPFNModel(AbstractModel):
 
         assert _CURRENT_PYTORCH_MODEL is not None
         assert _CURRENT_DEVICE is not None
-        self.model = NanoTabPFNClassifier(_CURRENT_PYTORCH_MODEL, _CURRENT_DEVICE)
+        self.model = NanoTabPFNClassifier(_CURRENT_PYTORCH_MODEL, _CURRENT_DEVICE, n_ensemble=8)
         self.model.fit(X_np, y_np)
+
+    def predict_proba(self, X, **kwargs):
+        """Override to print peak memory allocated once per dataset."""
+        probs = super().predict_proba(X, **kwargs)
+
+        # Log peak memory once per dataset
+        global _PRINTED_DATASETS
+        try:
+            path_parts = Path(self.path).parts
+            base_name = self.name.split("/")[0]
+            dataset_id = None
+            for i, part in enumerate(path_parts):
+                if part == base_name and i + 1 < len(path_parts):
+                    dataset_id = path_parts[i + 1]
+                    break
+            if dataset_id is None and len(path_parts) >= 3:
+                dataset_id = path_parts[-3]
+
+            if dataset_id is not None and dataset_id not in _PRINTED_DATASETS:
+                _PRINTED_DATASETS.add(dataset_id)
+                global _CURRENT_DEVICE
+                if _CURRENT_DEVICE is not None and _CURRENT_DEVICE.type == "cuda":
+                    peak_mem_gb = torch.cuda.max_memory_allocated(_CURRENT_DEVICE) / (1024**3)
+                    print(f"[NanoTabPFN] Peak GPU memory allocated for dataset {dataset_id}: {peak_mem_gb:.2f} GB")
+        except Exception:
+            pass
+
+        return probs
 
     def _get_default_auxiliary_params(self) -> dict:
         default_auxiliary_params = super()._get_default_auxiliary_params()
@@ -81,6 +109,7 @@ class TabArenaNanoTabPFNModel(AbstractModel):
 # Global variables for in-process sharing
 _CURRENT_PYTORCH_MODEL: NanoTabPFNModel | None = None
 _CURRENT_DEVICE: torch.device | None = None
+_PRINTED_DATASETS: set[str] = set()
 
 
 def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Path):

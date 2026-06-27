@@ -3,7 +3,7 @@ id: EVAL-002
 title: "TabArena Evaluation"
 status: implemented
 module: tabarena_eval.py
-last_synced: 2026-06-25
+last_synced: 2026-06-26
 ---
 
 # TabArena Evaluation
@@ -23,7 +23,7 @@ As a researcher, I want to evaluate my trained model on the TabArena benchmark s
 - [x] AC-5: `_preprocess` calls `super()._preprocess(X, **kwargs)` before custom preprocessing.
 - [x] AC-6: `_fit` converts the DataFrame to `np.float32` and the Series to `np.int64` before passing to `NanoTabPFNClassifier`.
 - [x] AC-7: `_fit` retrieves the shared model and device from module-level globals `_CURRENT_PYTORCH_MODEL` and `_CURRENT_DEVICE`.
-- [x] AC-8: `_fit` asserts that both `_CURRENT_PYTORCH_MODEL` and `_CURRENT_DEVICE` are not None.
+- [x] AC-8: `_fit` asserts that both `_CURRENT_PYTORCH_MODEL` and `_CURRENT_DEVICE` are not None, and instantiates `NanoTabPFNClassifier` with `n_ensemble=8`.
 - [x] AC-9: `_get_default_auxiliary_params` sets `valid_raw_types` to `["int", "float", "category"]`.
 - [x] AC-10: `supported_problem_types` returns `["binary", "multiclass"]`.
 - [x] AC-11: `config_generator` returns a `ConfigGenerator` with a single empty manual config and no search space.
@@ -42,6 +42,7 @@ As a researcher, I want to evaluate my trained model on the TabArena benchmark s
 
 - [x] AC-19: Module-level variables `_CURRENT_PYTORCH_MODEL` and `_CURRENT_DEVICE` are initialized to `None`.
 - [x] AC-20: `run_tabarena_eval` sets these globals before building experiments so that `_fit` can access the pre-trained model.
+- [x] AC-21: `TabArenaNanoTabPFNModel` overrides `predict_proba` to print peak GPU memory allocated once per dataset, extracting the dataset identifier from the model path.
 
 ## Notes
 
