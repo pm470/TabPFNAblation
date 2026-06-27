@@ -34,3 +34,26 @@ uv run ruff check .
 ```
 
 Results are written to `results/<activation>/seed_<N>/` with `config.json`, `metrics.jsonl`, and `checkpoints/`.
+
+## Cluster specific commands (bwUniCluster)
+
+To run and monitor experiments on the bwUniCluster, use the following SLURM commands based on common workflow:
+
+```bash
+# Check for available idle nodes
+sinfo_t_idle
+
+# Submit the benchmark job
+sbatch run_benchmark_bwunicluster.sbatch
+
+# Check the status of your jobs
+sacct -u $USER
+
+# Check expected start times for pending jobs
+squeue --start -u $USER
+
+# View the output and error logs (in the logs directory)
+cd logs
+cat tabpfn_tabarena_<JOBID>.out
+tail -f tabpfn_tabarena_<JOBID>.err
+```

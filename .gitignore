@@ -11,6 +11,7 @@ __pycache__/
 *.h5
 
 # Local config
+.env
 uv.toml
 
 # Results (generated, don't commit)
