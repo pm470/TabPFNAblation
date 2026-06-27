@@ -39,17 +39,17 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-21: If no device is provided, `get_default_device()` is used (prefers CUDA > MPS > CPU).
 - [x] AC-21.1: At the end of training (the `train` function), if the device is CUDA, the peak GPU memory allocated is printed exactly once.
 
-### PriorDumpDataLoader
+### NanopriorDataLoader
 
-- [x] AC-22: Inherits from `torch.utils.data.DataLoader`.
-- [x] AC-23: Loads data from an HDF5 file specified by `filename`.
-- [x] AC-24: Reads `max_num_classes` from the HDF5 file at construction time.
+- [x] AC-22: Inherits from `torch.utils.data.IterableDataset` and is wrapped by `torch.utils.data.DataLoader` for batching/multiprocessing.
+- [x] AC-23: Generates synthetic datasets on the fly using `prior.py`'s `rand_dataset_filtered`.
+- [x] AC-24: Batches are generated directly within the dataset so all datasets in a batch share the exact same `n_samples`, `n_features`, and `x_cat_sizes`.
 - [x] AC-25: Iterates for exactly `num_steps` batches per epoch.
 - [x] AC-26: Each yielded batch is a dict with keys `x`, `y`, and `train_test_split_index`.
-- [x] AC-27: `train_test_split_index` is a scalar value extracted via `[0].item()` from the first sample in the batch.
-- [x] AC-28: X and y tensors are dynamically sized per batch: `num_features` and `max_seq_in_batch` are computed from the current batch.
-- [x] AC-29: When the pointer reaches the end of the HDF5 dataset, it wraps around to 0.
-- [x] AC-30: `__len__` returns `num_steps`.
+- [x] AC-27: `train_test_split_index` is a randomly chosen index between 50% and 90% of the `n_samples`.
+- [x] AC-28: `num_workers` is supported to accelerate generation.
+- [x] AC-29: The `num_classes` parameter is randomized per batch but bounded by `max_classes`.
+- [x] AC-30: Yields tensors matching the `x` and `y` shapes expected by `NanoTabPFNModel`.
 
 ## Notes
 

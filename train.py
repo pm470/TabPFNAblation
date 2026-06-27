@@ -166,51 +166,76 @@ def train(
     return model, eval_history
 
 
-class PriorDumpDataLoader(DataLoader):
-    """DataLoader that loads synthetic prior data from an HDF5 dump.
+class NanopriorDataset(torch.utils.data.IterableDataset):
+    """IterableDataset that generates synthetic prior data on the fly.
 
     Args:
-        filename (str): Path to the HDF5 file.
         num_steps (int): Number of batches per epoch.
         batch_size (int): Batch size.
+        max_seq_len (int): Maximum number of rows per dataset.
+        max_features (int): Maximum number of features per dataset.
+        max_classes (int): Maximum number of classes.
         device (torch.device): Device to load tensors onto.
     """
 
-    def __init__(self, filename: str, num_steps: int, batch_size: int, device: torch.device | None = None):
-        """Initialize loader."""
-        self.filename = filename
+    def __init__(
+        self,
+        num_steps: int,
+        batch_size: int,
+        max_seq_len: int = 1000,
+        max_features: int = 60,
+        max_classes: int = 10,
+        device: torch.device | None = None,
+    ):
+        """Initialize dataset."""
+        super().__init__()
         self.num_steps = num_steps
         self.batch_size = batch_size
-        self.device = device
-        self.pointer = 0
-        if device is None:
-            device = get_default_device()
-        with h5py.File(self.filename, "r") as f:
-            self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
+        self.max_seq_len = max_seq_len
+        self.max_features = max_features
+        self.max_classes = max_classes
+        self.device = device if device is not None else get_default_device()
 
-    def __iter__(self):  # pyright: ignore
+    def __iter__(self):
         """Yield batches."""
-        with h5py.File(self.filename, "r") as f:
-            for _ in range(self.num_steps):
-                assert self.batch_size is not None
-                end = self.pointer + self.batch_size
-                num_features = f["num_features"][self.pointer : end].max()  # pyright: ignore
-                num_datapoints_batch = f["num_datapoints"][self.pointer : end]  # pyright: ignore
-                max_seq_in_batch = int(num_datapoints_batch.max())  # pyright: ignore
-                x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])  # pyright: ignore
-                y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])  # pyright: ignore
-                train_test_split_index = f["single_eval_pos"][self.pointer : end]  # pyright: ignore
+        from prior import rand_dataset_filtered, rand_cat_sizes
+        import math
 
-                self.pointer += self.batch_size
-                if self.pointer >= f["X"].shape[0]:  # pyright: ignore
-                    print("""Finished iteration over all stored datasets! """)
-                    self.pointer = 0
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            # single-process data loading
+            steps = self.num_steps
+        else:
+            # split steps across workers
+            steps = int(math.ceil(self.num_steps / float(worker_info.num_workers)))
 
-                yield dict(
-                    x=x.to(self.device),
-                    y=y.to(self.device),
-                    train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
-                )
+        for _ in range(steps):
+            n_samples = np.random.randint(100, self.max_seq_len + 1)
+            n_features = np.random.randint(2, self.max_features + 1)
+            n_classes = np.random.randint(2, self.max_classes + 1)
+
+            x_cat_sizes = rand_cat_sizes(n_features)
+            y_cat_sizes = [n_classes]
+
+            xs, ys = [], []
+            for _ in range(self.batch_size):
+                tensors = rand_dataset_filtered(x_cat_sizes, y_cat_sizes, n_samples)
+                x = torch.cat([tensors[f"x_{i}"] for i in range(len(x_cat_sizes))], dim=-1)
+                y = tensors["y_0"].squeeze(-1)
+                xs.append(x)
+                ys.append(y)
+
+            x_batch = torch.stack(xs, dim=0)
+            y_batch = torch.stack(ys, dim=0)
+
+            # 50% to 90% of samples used for training
+            train_test_split_index = int(n_samples * np.random.uniform(0.5, 0.9))
+
+            yield dict(
+                x=x_batch.to(self.device),
+                y=y_batch.to(self.device),
+                train_test_split_index=train_test_split_index,
+            )
 
     def __len__(self):
         """Return number of steps."""
@@ -227,7 +252,8 @@ if __name__ == "__main__":
         num_layers=3,
         num_outputs=2,
     )
-    prior = PriorDumpDataLoader("300k_150x5_2.h5", num_steps=2500, batch_size=32, device=device)
+    dataset = NanopriorDataset(num_steps=2500, batch_size=32, device=device)
+    prior = DataLoader(dataset, batch_size=None, num_workers=0)
     model, history = train(model, prior, lr=4e-3, steps_per_eval=25, eval_func=eval)
     print("Final evaluation:")
     print(eval(NanoTabPFNClassifier(model, device)))
