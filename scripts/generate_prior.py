@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from train import NanopriorDataset, set_randomness_seed
+from nanotabpfn.train import NanopriorDataset, set_randomness_seed
 
 
 def parse_args():

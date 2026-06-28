@@ -5,9 +5,9 @@ from pathlib import Path
 
 import torch
 
-from model import NanoTabPFNModel
-from tabarena_eval import run_tabarena_eval
-from train import get_default_device
+from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.tabarena_eval import run_tabarena_eval
+from nanotabpfn.train import get_default_device
 
 
 def parse_args():

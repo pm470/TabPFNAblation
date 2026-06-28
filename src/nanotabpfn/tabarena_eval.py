@@ -12,7 +12,7 @@ from autogluon.features import LabelEncoderFeatureGenerator
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
 
-from model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 
 if TYPE_CHECKING:
     import pandas as pd

@@ -1,6 +1,6 @@
 import pytest
 
-from model import NanoTabPFNModel
+from nanotabpfn.model import NanoTabPFNModel
 
 
 def test_param_count_gelu():

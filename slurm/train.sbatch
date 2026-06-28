@@ -9,10 +9,14 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --array=0-2  # Array for seeds 0, 1, 2
 
-# Ensure logs directory exists in the code repo
+# Ensure logs directory exists
 mkdir -p logs
 
-# Load environment variables (e.g., WORKSPACE_DIR) if .env exists
+# Load modules (using nvidia-hpc-sdk for GPU support)
+module purge
+module load compiler/gnu toolkit/nvidia-hpc-sdk/25.1 2>/dev/null || true
+
+# Load environment variables
 if [ -f .env ]; then
     set -a
     source .env
@@ -24,14 +28,16 @@ WORKSPACE_DIR="${WORKSPACE_DIR:-/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn
 DATA_DIR="${WORKSPACE_DIR}/data"
 RESULTS_DIR="${WORKSPACE_DIR}/results"
 
-# Ensure workspace directories exist
 mkdir -p "$DATA_DIR"
 mkdir -p "$RESULTS_DIR"
 
-# Activate environment (adjust path if needed for BwUniClust3.0)
-source .venv/bin/activate || true
+export PATH="$HOME/.local/bin:$PATH"
 
-# Map array index to seed
+if ! command -v uv &>/dev/null; then
+  echo "uv not found, installing..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+
 SEEDS=(0 1 2)
 SEED=${SEEDS[$SLURM_ARRAY_TASK_ID]}
 ACTIVATION="gelu"
@@ -39,7 +45,7 @@ ACTIVATION="gelu"
 echo "Starting training for activation=${ACTIVATION}, seed=${SEED}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-python train_ablation.py \
+UV_INDEX_STRATEGY="unsafe-best-match" uv run python train_ablation.py \
     --activation "$ACTIVATION" \
     --seed "$SEED" \
     --num_steps 2500 \

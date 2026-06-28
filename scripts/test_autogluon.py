@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import torch
 
-import tabarena_eval
-from model import NanoTabPFNModel
-from tabarena_eval import TabArenaNanoTabPFNModel
+from nanotabpfn import tabarena_eval
+from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.tabarena_eval import TabArenaNanoTabPFNModel
 
 device = torch.device("cpu")
 model = NanoTabPFNModel(96, 4, 192, 3, 2)

@@ -4,8 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from model import NanoTabPFNModel
-from train import (
+from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.train import (
     PriorDumpDataLoader,
     get_default_device,
     set_randomness_seed,

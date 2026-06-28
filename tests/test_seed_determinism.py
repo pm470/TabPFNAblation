@@ -9,7 +9,8 @@ import torch
 
 from run_experiment import parse_args, run_experiment
 
-TEST_OUTPUT_DIR = Path("results_test_determinism")
+import tempfile
+TEST_OUTPUT_DIR = Path(tempfile.gettempdir()) / "tabpfn_results_test_determinism"
 
 
 @pytest.fixture(autouse=True)

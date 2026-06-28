@@ -10,7 +10,8 @@ import torch
 from run_experiment import parse_args, run_experiment
 
 # Use a temporary output dir for tests
-TEST_OUTPUT_DIR = Path("results_test")
+import tempfile
+TEST_OUTPUT_DIR = Path(tempfile.gettempdir()) / "tabpfn_results_test"
 
 
 @pytest.fixture(autouse=True)

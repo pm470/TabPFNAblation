@@ -4,8 +4,8 @@ import h5py
 import numpy as np
 import torch
 
-from model import NanoTabPFNModel
-from train import PriorDumpDataLoader, train
+from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.train import PriorDumpDataLoader, train
 
 
 def test_train_without_eval_func():

@@ -1,3 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project]
 name = "tabpfn-ablation"
 version = "0.1.0"
@@ -46,11 +53,16 @@ environments = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = "src"
 
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+extraPaths = ["src"]
 typeCheckingMode = "basic"
 exclude = ["prior.py", ".venv"]
 reportPrivateImportUsage = false
 
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nanotabpfn"]

@@ -2,7 +2,7 @@
 
 import torch
 
-from model import NanoTabPFNModel
+from nanotabpfn.model import NanoTabPFNModel
 
 
 def make_model():
@@ -62,7 +62,7 @@ def test_classifier_predict():
     """NanoTabPFNClassifier.predict returns class labels via argmax."""
     import numpy as np
 
-    from model import NanoTabPFNClassifier
+    from nanotabpfn.model import NanoTabPFNClassifier
 
     model = make_model()
     classifier = NanoTabPFNClassifier(model, torch.device("cpu"))

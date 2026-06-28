@@ -1312,7 +1312,7 @@ dependencies = [
 [[package]]
 name = "tabpfn-ablation"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "autogluon-tabular", marker = "sys_platform == 'linux'" },
     { name = "h5py", marker = "sys_platform == 'linux'" },

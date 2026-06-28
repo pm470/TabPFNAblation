@@ -4,7 +4,7 @@ import time
 
 import torch
 
-from prior import rand_cat_sizes, rand_dataset_filtered
+from nanotabpfn.prior import rand_cat_sizes, rand_dataset_filtered
 
 start = time.time()
 x_cat_sizes = rand_cat_sizes(10)

@@ -11,8 +11,8 @@ from pathlib import Path
 
 import torch
 
-from model import NanoTabPFNModel
-from train import (
+from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.train import (
     NanopriorDataset,
     eval,
     get_default_device,
@@ -137,13 +137,13 @@ def run_experiment(args):
     model.eval()
 
     if args.benchmark == "tabarena":
-        from tabarena_eval import run_tabarena_eval
+        from nanotabpfn.tabarena_eval import run_tabarena_eval
 
         print("Running TabArena final evaluation...")
         run_tabarena_eval(model, device, run_dir)
     else:
-        from model import NanoTabPFNClassifier
-        from train import eval as eval_fn
+        from nanotabpfn.model import NanoTabPFNClassifier
+        from nanotabpfn.train import eval as eval_fn
 
         classifier = NanoTabPFNClassifier(model, device)
         final_scores = eval_fn(classifier)

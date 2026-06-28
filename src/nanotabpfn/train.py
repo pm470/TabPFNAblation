@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 
-from model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 
 
 def set_randomness_seed(seed):
@@ -261,7 +261,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         """Yield batches."""
         import math
 
-        from prior import rand_cat_sizes, rand_dataset_filtered
+        from nanotabpfn.prior import rand_cat_sizes, rand_dataset_filtered
 
         worker_info = torch.utils.data.get_worker_info()
         # split steps across workers if in multi-process loading
