@@ -11,8 +11,8 @@ n_samples = 1000
 
 for i in range(4):
     tensors = rand_dataset_filtered(x_cat_sizes, y_cat_sizes, n_samples)
-    x = torch.cat([tensors[f'x_{j}'] for j in range(len(x_cat_sizes))], dim=-1)
-    y = tensors['y_0'].squeeze(-1)
+    x = torch.cat([tensors[f"x_{j}"] for j in range(len(x_cat_sizes))], dim=-1)
+    y = tensors["y_0"].squeeze(-1)
     print(f"Dataset {i}: x.shape={x.shape}, y.shape={y.shape}")
 
 print(f"Time for 4 datasets: {time.time() - start:.2f}s")

@@ -319,11 +319,11 @@ class NanoTabPFNClassifier:
             if len(self.model.transformer_blocks) > 0:
                 num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads
 
-            # Target peak memory of 8.0 GiB for the attention weights tensor.
+            # Target peak memory of 30.0 GiB for the attention weights tensor.
             # The actual peak is ~2x this (scores + softmax output coexist briefly),
-            # so this targets ~16 GiB peak — safe for 48+ GB GPUs.
+            # so this targets ~60 GiB peak — perfect for 80+ GB GPUs like the A100.
             # Memory per attention = col_size * num_heads * (seq_len ** 2) * 4 bytes
-            max_attn_bytes = 8.0 * (1024 ** 3)
+            max_attn_bytes = 30.0 * (1024**3)
             max_seq_len = int(np.sqrt(max_attn_bytes / (col_size * num_heads * 4)))
 
             # Clip max_seq_len to a reasonable range [1000, 10000]
@@ -339,7 +339,7 @@ class NanoTabPFNClassifier:
 
         all_ensemble_probs = []
         # If the dataset is small enough, no subsampling is needed.
-        # Since nanoTabPFN does not yet do feature/label permutations, running 
+        # Since nanoTabPFN does not yet do feature/label permutations, running
         # multiple identical ensembles would be a waste of compute.
         actual_ensemble_size = self.n_ensemble if len(self.X_train) > max_train_samples else 1
 
@@ -348,8 +348,11 @@ class NanoTabPFNClassifier:
                 # 2. Stratified subsample training context if it's too large
                 try:
                     X_train_sub, _, y_train_sub, _ = train_test_split(
-                        self.X_train, self.y_train, train_size=max_train_samples,
-                        stratify=self.y_train, random_state=42 + ensemble_idx
+                        self.X_train,
+                        self.y_train,
+                        train_size=max_train_samples,
+                        stratify=self.y_train,
+                        random_state=42 + ensemble_idx,
                     )
                 except ValueError:
                     # Fallback to purely random subset if a class has too few samples to stratify
@@ -363,13 +366,16 @@ class NanoTabPFNClassifier:
 
             all_probs = []
             for i in range(0, len(X_test), max_test_chunk):
-                X_test_chunk = X_test[i:i + max_test_chunk]
+                X_test_chunk = X_test[i : i + max_test_chunk]
                 x = np.concatenate((X_train_sub, X_test_chunk))
                 y = y_train_sub
 
                 # Use autocast for mixed precision (saves memory, allows larger context)
                 device_type = self.device.type if self.device.type != "mps" else "cpu"
-                with torch.no_grad(), torch.autocast(device_type=device_type, dtype=torch.float16, enabled=self.device.type != "cpu"):
+                with (
+                    torch.no_grad(),
+                    torch.autocast(device_type=device_type, dtype=torch.float16, enabled=self.device.type != "cpu"),
+                ):
                     x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
                     y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
                     out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
@@ -377,7 +383,7 @@ class NanoTabPFNClassifier:
                     # Compute probabilities in float32 for stability
                     probs = F.softmax(out.to(torch.float32), dim=1).cpu().numpy()
                     all_probs.append(probs)
-            
+
             all_ensemble_probs.append(np.concatenate(all_probs, axis=0))
 
         # Average probabilities across all ensemble members

@@ -71,7 +71,7 @@ def run_training(args):
         "param_count": param_count,
         "device": str(device),
     }
-    
+
     config_path = run_dir / "config.json"
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
@@ -103,11 +103,12 @@ def run_training(args):
     with open(metrics_path, "w") as f:
         for entry in eval_history:
             f.write(json.dumps(entry) + "\n")
-    
+
     print(f"\nMetrics saved to {metrics_path}")
     print(f"Checkpoints saved to {checkpoint_dir}")
 
     return eval_history
+
 
 if __name__ == "__main__":
     args = parse_args()
