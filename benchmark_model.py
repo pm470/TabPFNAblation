@@ -1,8 +1,9 @@
 """Standalone benchmarking script for trained models."""
 
 import argparse
-import torch
 from pathlib import Path
+
+import torch
 
 from model import NanoTabPFNModel
 from tabarena_eval import run_tabarena_eval
@@ -10,6 +11,7 @@ from train import get_default_device
 
 
 def parse_args():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Benchmark a trained model")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to the trained model.pt")
     parser.add_argument(
@@ -29,6 +31,7 @@ def parse_args():
 
 
 def main():
+    """Run the benchmark on a trained model."""
     args = parse_args()
     device = get_default_device()
 

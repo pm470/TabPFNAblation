@@ -79,7 +79,7 @@ class FeatureEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size), representing
                            the embeddings of the features
         """
-        x = x.unsqueeze(-1)
+        x = x.unsqueeze(-1).float()
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdim=True)
         std = torch.std(x[:, :train_test_split_index], dim=1, keepdim=True) + 1e-20
         x = (x - mean) / std
@@ -106,6 +106,7 @@ class TargetEncoder(nn.Module):
                            the embeddings of the targets
         """
         # nan padding & nan handler instead?
+        y_train = y_train.float()
         mean = torch.mean(y_train, dim=1, keepdim=True)
         padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
         y = torch.cat([y_train, padding], dim=1)
@@ -317,7 +318,7 @@ class NanoTabPFNClassifier:
             col_size = num_features + 1
             num_heads = 4
             if len(self.model.transformer_blocks) > 0:
-                num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads
+                num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads  # pyright: ignore[reportAttributeAccessIssue]
 
             # Target peak memory of 30.0 GiB for the attention weights tensor.
             # The actual peak is ~2x this (scores + softmax output coexist briefly),

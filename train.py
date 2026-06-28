@@ -259,16 +259,13 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
 
     def __iter__(self):
         """Yield batches."""
-        from prior import rand_dataset_filtered, rand_cat_sizes
         import math
 
+        from prior import rand_cat_sizes, rand_dataset_filtered
+
         worker_info = torch.utils.data.get_worker_info()
-        if worker_info is None:
-            # single-process data loading
-            steps = self.num_steps
-        else:
-            # split steps across workers
-            steps = int(math.ceil(self.num_steps / float(worker_info.num_workers)))
+        # split steps across workers if in multi-process loading
+        steps = self.num_steps if worker_info is None else math.ceil(self.num_steps / float(worker_info.num_workers))
 
         for _ in range(steps):
             n_samples = np.random.randint(100, self.max_seq_len + 1)

@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import torch
 
 from run_experiment import parse_args, run_experiment
 
@@ -19,6 +20,7 @@ def cleanup_test_outputs():
     yield
     if TEST_OUTPUT_DIR.exists():
         shutil.rmtree(TEST_OUTPUT_DIR)
+    torch.cuda.empty_cache()
 
 
 def run_and_collect_losses(seed, run_id):
@@ -33,11 +35,17 @@ def run_and_collect_losses(seed, run_id):
             "--eval_every",
             "5",
             "--checkpoint_every",
-            "0",
+            "10",
             "--output_dir",
             str(output_dir),
             "--activation",
             "gelu",
+            "--batch_size",
+            "2",
+            "--max_seq_len",
+            "100",
+            "--max_features",
+            "10",
         ]
     )
     run_experiment(args)
@@ -48,6 +56,7 @@ def run_and_collect_losses(seed, run_id):
         for line in f:
             entry = json.loads(line.strip())
             losses.append(entry["loss"])
+    torch.cuda.empty_cache()
     return losses
 
 

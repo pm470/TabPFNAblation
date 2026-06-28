@@ -52,4 +52,5 @@ venvPath = "."
 venv = ".venv"
 typeCheckingMode = "basic"
 exclude = ["prior.py", ".venv"]
+reportPrivateImportUsage = false
 

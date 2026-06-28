@@ -1,6 +1,10 @@
+"""Test script for generating prior datasets."""
+
 import time
+
 import torch
-from prior import rand_dataset_filtered, rand_cat_sizes
+
+from prior import rand_cat_sizes, rand_dataset_filtered
 
 start = time.time()
 x_cat_sizes = rand_cat_sizes(10)

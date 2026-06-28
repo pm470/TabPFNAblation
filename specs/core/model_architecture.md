@@ -30,7 +30,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 ### FeatureEncoder
 
 - [x] AC-10: Uses a single `nn.Linear(1, embedding_size)` to embed scalar features.
-- [x] AC-11: Normalization is computed from training rows only: mean and std over `x[:, :train_test_split_index]` along dim=1 with `keepdim=True`.
+- [x] AC-11: Normalization is computed from training rows only: mean and std over `x[:, :train_test_split_index]` (cast to float) along dim=1 with `keepdim=True`.
 - [x] AC-12: Std uses an epsilon of `1e-20` to avoid division by zero.
 - [x] AC-13: Normalized features are clipped to `[-100, 100]` via `torch.clip`.
 - [x] AC-14: Input `(B, R, C)` produces output `(B, R, C, E)` where E is `embedding_size`.
@@ -38,7 +38,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 ### TargetEncoder
 
 - [x] AC-15: Uses a single `nn.Linear(1, embedding_size)` to embed scalar targets.
-- [x] AC-16: Test-row targets are padded with the per-batch mean of `y_train` (computed over dim=1, keepdim=True).
+- [x] AC-16: Test-row targets are padded with the per-batch mean of `y_train` (cast to float, computed over dim=1, keepdim=True).
 - [x] AC-17: Padding is created via `mean.repeat(1, num_rows - y_train.shape[1], 1)` and concatenated with `y_train`.
 - [x] AC-18: Input `(B, N_train, 1)` produces output `(B, num_rows, 1, E)`.
 

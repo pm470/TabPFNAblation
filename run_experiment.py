@@ -9,6 +9,8 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
+
 from model import NanoTabPFNModel
 from train import (
     NanopriorDataset,

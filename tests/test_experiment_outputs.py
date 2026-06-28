@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import torch
 
 from run_experiment import parse_args, run_experiment
 
@@ -20,6 +21,7 @@ def cleanup_test_outputs():
     yield
     if TEST_OUTPUT_DIR.exists():
         shutil.rmtree(TEST_OUTPUT_DIR)
+    torch.cuda.empty_cache()
 
 
 def run_short_experiment(seed=0, num_steps=10, eval_every=5, checkpoint_every=5):
@@ -38,6 +40,12 @@ def run_short_experiment(seed=0, num_steps=10, eval_every=5, checkpoint_every=5)
             str(TEST_OUTPUT_DIR),
             "--activation",
             "gelu",
+            "--batch_size",
+            "2",
+            "--max_seq_len",
+            "100",
+            "--max_features",
+            "10",
         ]
     )
     return run_experiment(args)

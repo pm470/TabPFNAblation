@@ -1,13 +1,15 @@
-import pandas as pd
+"""Test script for AutoGluon model wrapper."""
+
 import numpy as np
-from tabarena_eval import TabArenaNanoTabPFNModel
-from model import NanoTabPFNModel
+import pandas as pd
 import torch
+
+import tabarena_eval
+from model import NanoTabPFNModel
+from tabarena_eval import TabArenaNanoTabPFNModel
 
 device = torch.device("cpu")
 model = NanoTabPFNModel(96, 4, 192, 3, 2)
-
-import tabarena_eval
 
 tabarena_eval._CURRENT_PYTORCH_MODEL = model
 tabarena_eval._CURRENT_DEVICE = device

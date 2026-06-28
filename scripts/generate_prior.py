@@ -1,16 +1,16 @@
-"""
-Generate synthetic prior data to an HDF5 file.
+"""Generate synthetic prior data to an HDF5 file.
+
 Iterates over NanopriorDataset and dumps it sequentially to HDF5.
 """
 
 import argparse
 import os
+import sys
 
 import h5py
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -18,6 +18,7 @@ from train import NanopriorDataset, set_randomness_seed
 
 
 def parse_args():
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Generate synthetic TabPFN prior datasets to HDF5.")
     parser.add_argument("--output_file", type=str, default="prior_dump.h5", help="Path to output HDF5 file")
     parser.add_argument("--num_datasets", type=int, default=100000, help="Total number of datasets to generate")
@@ -31,6 +32,7 @@ def parse_args():
 
 
 def main():
+    """Generate datasets based on parsed arguments."""
     args = parse_args()
     set_randomness_seed(args.seed)
 
