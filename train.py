@@ -71,6 +71,7 @@ def train(
     eval_func=None,
     checkpoint_dir: str | None = None,
     checkpoint_every: int | None = None,
+    checkpoint_every_minutes: float | None = None,
 ):
     """Trains our model on the given prior using the given criterion.
 
@@ -84,6 +85,7 @@ def train(
                    for some metrics and datasets
         checkpoint_dir: (str|None) directory to save model checkpoints to
         checkpoint_every: (int|None) save a checkpoint every N steps
+        checkpoint_every_minutes: (float|None) save a checkpoint every N minutes
 
     Returns:
         (model) our trained numpy model
@@ -100,6 +102,7 @@ def train(
 
     train_time = 0
     eval_history = []
+    last_checkpoint_time = time.time()
     try:
         for step, full_data in enumerate(prior):
             step_start_time = time.time()
@@ -145,7 +148,16 @@ def train(
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
 
             # save checkpoint
-            if checkpoint_dir and checkpoint_every and (step + 1) % checkpoint_every == 0:
+            time_to_save = False
+            if checkpoint_every_minutes is not None:
+                current_wall_time = time.time()
+                if (current_wall_time - last_checkpoint_time) / 60.0 >= checkpoint_every_minutes:
+                    time_to_save = True
+                    last_checkpoint_time = current_wall_time
+
+            step_to_save = checkpoint_every is not None and (step + 1) % checkpoint_every == 0
+
+            if checkpoint_dir and (time_to_save or step_to_save):
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"step_{step + 1:05d}.pt")
                 torch.save(model.state_dict(), checkpoint_path)
@@ -164,6 +176,55 @@ def train(
         print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
 
     return model, eval_history
+
+
+class PriorDumpDataLoader(DataLoader):
+    """DataLoader that loads synthetic prior data from an HDF5 dump.
+
+    Args:
+        filename (str): Path to the HDF5 file.
+        num_steps (int): Number of batches per epoch.
+        batch_size (int): Batch size.
+        device (torch.device): Device to load tensors onto.
+    """
+
+    def __init__(self, filename: str, num_steps: int, batch_size: int, device: torch.device | None = None):
+        """Initialize loader."""
+        self.filename = filename
+        self.num_steps = num_steps
+        self.batch_size = batch_size
+        self.device = device if device is not None else get_default_device()
+        self.pointer = 0
+        with h5py.File(self.filename, "r") as f:
+            self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
+
+    def __iter__(self):  # pyright: ignore
+        """Yield batches."""
+        with h5py.File(self.filename, "r") as f:
+            for _ in range(self.num_steps):
+                assert self.batch_size is not None
+                end = self.pointer + self.batch_size
+                num_features = f["num_features"][self.pointer : end].max()  # pyright: ignore
+                num_datapoints_batch = f["num_datapoints"][self.pointer : end]  # pyright: ignore
+                max_seq_in_batch = int(num_datapoints_batch.max())  # pyright: ignore
+                x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])  # pyright: ignore
+                y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])  # pyright: ignore
+                train_test_split_index = f["single_eval_pos"][self.pointer : end]  # pyright: ignore
+
+                self.pointer += self.batch_size
+                if self.pointer >= f["X"].shape[0]:  # pyright: ignore
+                    print("Finished iteration over all stored datasets!")
+                    self.pointer = 0
+
+                yield dict(
+                    x=x.to(self.device),
+                    y=y.to(self.device),
+                    train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
+                )
+
+    def __len__(self):
+        """Return number of steps."""
+        return self.num_steps
 
 
 class NanopriorDataset(torch.utils.data.IterableDataset):

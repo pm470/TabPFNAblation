@@ -53,7 +53,9 @@ class TabArenaNanoTabPFNModel(AbstractModel):
 
         assert _CURRENT_PYTORCH_MODEL is not None
         assert _CURRENT_DEVICE is not None
-        self.model = NanoTabPFNClassifier(_CURRENT_PYTORCH_MODEL, _CURRENT_DEVICE, n_ensemble=8)
+        
+        n_ensemble = globals().get("_CURRENT_N_ENSEMBLE", 8)
+        self.model = NanoTabPFNClassifier(_CURRENT_PYTORCH_MODEL, _CURRENT_DEVICE, n_ensemble=n_ensemble)
         self.model.fit(X_np, y_np)
 
     def _predict_proba(self, X, **kwargs):
@@ -116,16 +118,19 @@ class TabArenaNanoTabPFNModel(AbstractModel):
 # Global variables for in-process sharing
 _CURRENT_PYTORCH_MODEL: NanoTabPFNModel | None = None
 _CURRENT_DEVICE: torch.device | None = None
+_CURRENT_N_ENSEMBLE: int = 8
 _PRINTED_DATASETS: set[str] = set()
 
 
-def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Path):
+def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "classification", n_ensemble: int = 8):
     """Run TabArena evaluation using the provided trained model."""
     global _CURRENT_PYTORCH_MODEL
     global _CURRENT_DEVICE
+    global _CURRENT_N_ENSEMBLE
 
     _CURRENT_PYTORCH_MODEL = model
     _CURRENT_DEVICE = device
+    _CURRENT_N_ENSEMBLE = n_ensemble
 
     results_dir = str(run_dir / "tabarena_exp")
 
@@ -140,7 +145,7 @@ def run_tabarena_eval(model: NanoTabPFNModel, device: torch.device, run_dir: Pat
     context.build_and_run_jobs(
         experiments,
         expname=results_dir,
-        subset="classification",
+        subset=subset,
         new_result_prefix="[New] ",
         debug_mode=True,  # In-process debugging required for our global variable hack
     )
