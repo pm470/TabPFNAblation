@@ -12,6 +12,8 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 
+import argparse
+
 
 def set_randomness_seed(seed):
     random.seed(seed)
@@ -171,6 +173,10 @@ class PriorDumpDataLoader(DataLoader):
         return self.num_steps
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--ffn_type', type=str, default='gelu', choices=['gelu', 'swiglu'], help='FFN variant to train')
+    args = parser.parse_args()
+
     device = get_default_device()
     model = NanoTabPFNModel(
         embedding_size=96,
@@ -178,9 +184,12 @@ if __name__ == "__main__":
         mlp_hidden_size=192,
         num_layers=3,
         num_outputs=2,
-        ffn_type='swiglu'
+        ffn_type=args.ffn_type
     )
     prior = PriorDumpDataLoader("../DataSet/300k_150x5_2.h5", num_steps=2500, batch_size=32, device=device)
     model, history = train(model, prior, lr=4e-3, steps_per_eval=25)
     print("Final evaluation:")
     print(eval(NanoTabPFNClassifier(model, device)))
+    
+    torch.save(model.state_dict(), f'{args.ffn_type}_checkpoint.pt')
+    print(f"Checkpoint saved: {args.ffn_type}_checkpoint.pt")
