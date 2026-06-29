@@ -34,6 +34,9 @@ rsync -avz --progress \
     --exclude 'wandb' \
     --exclude '.agents' \
     --exclude '.env' \
+    --exclude 'data' \
+    --exclude 'logs' \
+    --exclude '*.h5' \
     "$LOCAL_DIR" "$REMOTE_DEST"
 
 echo "Sync complete!"

@@ -11,9 +11,9 @@
 # Ensure logs directory exists
 mkdir -p logs
 
-# Load modules (if needed for the cluster, although CPU only)
+# Load modules
 module purge
-module load compiler/gnu toolkit/nvidia-hpc-sdk/25.1 2>/dev/null || true
+module load compiler/gnu 2>/dev/null || true
 
 # Load environment variables if .env exists
 if [ -f .env ]; then
@@ -35,12 +35,12 @@ if ! command -v uv &>/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
-echo "Generating synthetic prior data to ${DATA_DIR}/300k_150x5_2.h5"
+echo "Generating synthetic prior data to ${DATA_DIR}/300k_500x50_10.h5"
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/generate_prior.py \
-    --output_file "${DATA_DIR}/300k_150x5_2.h5" \
+    --output_file "${DATA_DIR}/300k_500x50_10.h5" \
     --num_datasets 300000 \
-    --max_seq_len 150 \
-    --max_features 5 \
-    --max_classes 2
+    --max_seq_len 500 \
+    --max_features 50 \
+    --max_classes 10
 
 echo "Generation completed."

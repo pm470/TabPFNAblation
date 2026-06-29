@@ -3,7 +3,7 @@
 #SBATCH --output=logs/train_%A_%a.out
 #SBATCH --error=logs/train_%A_%a.err
 #SBATCH --time=12:00:00
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu_a100_il
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
@@ -51,7 +51,7 @@ UV_INDEX_STRATEGY="unsafe-best-match" uv run python train_ablation.py \
     --num_steps 2500 \
     --eval_every 25 \
     --checkpoint_every 250 \
-    --data_file "${DATA_DIR}/300k_150x5_2.h5" \
+    --data_file "${DATA_DIR}/300k_500x50_10.h5" \
     --output_dir "${RESULTS_DIR}"
 
 echo "Training completed."
