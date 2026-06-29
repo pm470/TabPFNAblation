@@ -5,14 +5,14 @@ from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
 
 class NanoTabPFNModel(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int):
+    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, ffn_type: str = 'gelu'):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
-            self.transformer_blocks.append(TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size))
+            self.transformer_blocks.append(TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size, ffn_type=ffn_type))
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int) -> torch.Tensor:
@@ -97,13 +97,19 @@ class TransformerEncoderLayer(nn.Module):
     """
     def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int,
                  layer_norm_eps: float = 1e-5, batch_first: bool = True,
-                 device=None, dtype=None):
+                 device=None, dtype=None, ffn_type: str = 'gelu'):
         super().__init__()
+        self.ffn_type = ffn_type
         self.self_attention_between_datapoints = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
         self.self_attention_between_features = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
 
         self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
         self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
+        
+        # SwiGLU FFN (gate + value)
+        if ffn_type == 'swiglu':
+            self.gate = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
+            self.value = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
 
         self.norm1 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
@@ -139,8 +145,14 @@ class TransformerEncoderLayer(nn.Module):
         src = src.transpose(2, 1)
         src = self.norm2(src)
         # MLP after attention
-        src = self.linear2(F.gelu(self.linear1(src))) + src
+        if self.ffn_type == 'gelu':
+            src = self.linear2(F.gelu(self.linear1(src))) + src
+        elif self.ffn_type == 'swiglu':
+            gate = F.silu(self.gate(src))
+            value = self.value(src)
+            src = self.linear2(gate * value) + src
         src = self.norm3(src)
+        
         return src
 
 class Decoder(nn.Module):
