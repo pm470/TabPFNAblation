@@ -14,6 +14,7 @@ import torch
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import (
     NanopriorDataset,
+    PriorDumpDataLoader,
     eval,
     get_default_device,
     set_randomness_seed,
@@ -38,6 +39,7 @@ def parse_args(argv=None):
     parser.add_argument("--lr", type=float, default=4e-3, help="Learning rate")
     parser.add_argument("--eval_every", type=int, default=25, help="Evaluate every N steps")
     parser.add_argument("--checkpoint_every", type=int, default=250, help="Save checkpoint every N steps")
+    parser.add_argument("--data_file", type=str, default=None, help="Path to HDF5 prior data file")
     parser.add_argument("--output_dir", type=str, default="results", help="Base output directory")
     parser.add_argument("--max_seq_len", type=int, default=1000, help="Maximum number of rows per dataset")
     parser.add_argument("--max_features", type=int, default=60, help="Maximum number of features per dataset")
@@ -90,6 +92,7 @@ def run_experiment(args):
         "max_seq_len": args.max_seq_len,
         "max_features": args.max_features,
         "max_classes": args.max_classes,
+        "data_file": args.data_file,
         "param_count": param_count,
         "device": str(device),
     }
@@ -100,18 +103,27 @@ def run_experiment(args):
     print(f"Model parameters: {param_count:,}")
 
     # Create dataloader
-    from torch.utils.data import DataLoader
-
-    dataset = NanopriorDataset(
-        num_steps=args.num_steps,
-        batch_size=args.batch_size,
-        max_seq_len=args.max_seq_len,
-        max_features=args.max_features,
-        max_classes=args.max_classes,
-        device=device,
-    )
-    # Using 0 workers for safety/compatibility; increase if CPU allows.
-    prior = DataLoader(dataset, batch_size=None, num_workers=0)
+    if args.data_file:
+        print(f"Loading prior data from {args.data_file}")
+        prior = PriorDumpDataLoader(
+            filename=args.data_file,
+            num_steps=args.num_steps,
+            batch_size=args.batch_size,
+            device=device,
+        )
+    else:
+        from torch.utils.data import DataLoader
+        print("Generating prior data on the fly")
+        dataset = NanopriorDataset(
+            num_steps=args.num_steps,
+            batch_size=args.batch_size,
+            max_seq_len=args.max_seq_len,
+            max_features=args.max_features,
+            max_classes=args.max_classes,
+            device=device,
+        )
+        # Using 0 workers for safety/compatibility; increase if CPU allows.
+        prior = DataLoader(dataset, batch_size=None, num_workers=0)
 
     # Train
     model, eval_history = train(

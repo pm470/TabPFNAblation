@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
-#SBATCH --array=0-2  # Array for seeds 0, 1, 2
+#SBATCH --array=0  # Array for seed 0 (testing)
 
 # Ensure logs directory exists
 mkdir -p logs
@@ -38,19 +38,19 @@ if ! command -v uv &>/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
-SEEDS=(0 1 2)
+SEEDS=(0)
 SEED=${SEEDS[$SLURM_ARRAY_TASK_ID]}
 ACTIVATION="gelu"
 
 echo "Starting training for activation=${ACTIVATION}, seed=${SEED}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-UV_INDEX_STRATEGY="unsafe-best-match" uv run python train_ablation.py \
+UV_INDEX_STRATEGY="unsafe-best-match" uv run python run_experiment.py \
     --activation "$ACTIVATION" \
     --seed "$SEED" \
-    --num_steps 2500 \
-    --eval_every 25 \
-    --checkpoint_every 250 \
+    --num_steps 100000 \
+    --eval_every 1000 \
+    --checkpoint_every 10000 \
     --data_file "${DATA_DIR}/300k_500x50_10.h5" \
     --output_dir "${RESULTS_DIR}"
 
