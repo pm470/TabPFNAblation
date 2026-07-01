@@ -18,9 +18,9 @@ module load compiler/gnu toolkit/nvidia-hpc-sdk/25.1 2>/dev/null || true
 
 # Load environment variables
 if [ -f .env ]; then
-  set -a
-  source .env
-  set +a
+    set -a
+    source .env
+    set +a
 fi
 
 # Fallback to the cluster workspace path if not defined in .env
@@ -30,8 +30,8 @@ RESULTS_DIR="${WORKSPACE_DIR}/results"
 export PATH="$HOME/.local/bin:$PATH"
 
 if ! command -v uv &>/dev/null; then
-  echo "uv not found, installing..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+    echo "uv not found, installing..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
 SEEDS=(0)
@@ -45,9 +45,9 @@ echo "Starting TabArena Benchmark for ${CHECKPOINT}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/benchmark_model.py \
-  --checkpoint "$CHECKPOINT" \
-  --activation "$ACTIVATION" \
-  --subset "lite" \
-  --n_ensemble 8
+    --checkpoint "$CHECKPOINT" \
+    --activation "$ACTIVATION" \
+    --subset "nanotabpfn" \
+    --n_ensemble 8
 
 echo "Benchmarking completed."

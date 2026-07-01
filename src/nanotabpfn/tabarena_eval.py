@@ -11,6 +11,7 @@ from autogluon.core.models import AbstractModel
 from autogluon.features import LabelEncoderFeatureGenerator
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
+from tabarena.nips2025_utils.subset_predicate import SubsetPredicate
 
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 
@@ -141,6 +142,16 @@ def run_tabarena_eval(
             (TabArenaNanoTabPFNModel.config_generator(), 0),
         ],
     ).build_experiments()
+
+    TabArenaContext.SUBSET_PREDICATES["nanotabpfn"] = SubsetPredicate(
+        lambda df: (
+            (df["max_train_rows"] <= 10_000)
+            & (df["n_features"] <= 500)
+            & (df["n_classes"] > 0)
+            & (df["n_classes"] <= 10)
+        ),
+        ("max_train_rows", "n_features", "n_classes"),
+    )
 
     context = TabArenaContext()
 
