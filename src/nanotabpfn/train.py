@@ -260,8 +260,8 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         self,
         num_steps: int,
         batch_size: int,
-        max_seq_len: int = 1000,
-        max_features: int = 60,
+        max_seq_len: int = 3000,
+        max_features: int = 45,
         max_classes: int = 10,
         device: torch.device | None = None,
     ):

@@ -3,7 +3,7 @@ id: EVAL-002
 title: "TabArena Evaluation"
 status: implemented
 module: tabarena_eval.py
-last_synced: 2026-06-26
+last_synced: 2026-07-01
 ---
 
 # TabArena Evaluation
@@ -34,9 +34,10 @@ As a researcher, I want to evaluate my trained model on the TabArena benchmark s
 - [x] AC-13: Creates a `TabArenaV0pt1ExperimentBundle` with a single model entry (the `TabArenaNanoTabPFNModel` config generator at index 0).
 - [x] AC-14: Uses `TabArenaContext` to build and run evaluation jobs.
 - [x] AC-15: Results directory is `run_dir / "tabarena_exp"`.
-- [x] AC-16: Uses `subset="full"` in `build_and_run_jobs`.
+- [x] AC-16: Uses the `subset` parameter in `build_and_run_jobs` (defaults to `"classification"`).
 - [x] AC-17: Runs with `debug_mode=True` (required for the global variable sharing pattern).
 - [x] AC-18: Sets `new_result_prefix="[New] "` for result labeling.
+- [x] AC-18.1: Defines a `SubsetPredicate` for "nanotabpfn" requiring `max_train_rows <= 3000`, `n_features <= 45`, and `0 < n_classes <= 10`.
 
 ### Global Model Sharing
 
