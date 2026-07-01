@@ -81,7 +81,7 @@ class FeatureEncoder(nn.Module):
         """
         x = x.unsqueeze(-1).float()
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdim=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdim=True) + 1e-20
+        std = torch.std(x[:, :train_test_split_index], dim=1, unbiased=False, keepdim=True) + 1e-20
         x = (x - mean) / std
         x = torch.clip(x, min=-100, max=100)
         return self.linear_layer(x)

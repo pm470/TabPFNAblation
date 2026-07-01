@@ -2,6 +2,9 @@
 
 import json
 import shutil
+
+# Use a temporary output dir for tests
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -9,8 +12,6 @@ import torch
 
 from run_experiment import parse_args, run_experiment
 
-# Use a temporary output dir for tests
-import tempfile
 TEST_OUTPUT_DIR = Path(tempfile.gettempdir()) / "tabpfn_results_test"
 
 

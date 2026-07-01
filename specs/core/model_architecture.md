@@ -1,9 +1,9 @@
 ---
 id: CORE-001
 title: "NanoTabPFN Model Architecture"
-status: implemented
+status: edited
 module: model.py
-last_synced: 2026-06-26
+last_synced: 2026-07-01
 ---
 
 # NanoTabPFN Model Architecture
@@ -31,7 +31,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 
 - [x] AC-10: Uses a single `nn.Linear(1, embedding_size)` to embed scalar features.
 - [x] AC-11: Normalization is computed from training rows only: mean and std over `x[:, :train_test_split_index]` (cast to float) along dim=1 with `keepdim=True`.
-- [x] AC-12: Std uses an epsilon of `1e-20` to avoid division by zero.
+- [x] AC-12: Std uses `unbiased=False` and an epsilon of `1e-20` to avoid division by zero and NaNs for single-element batches.
 - [x] AC-13: Normalized features are clipped to `[-100, 100]` via `torch.clip`.
 - [x] AC-14: Input `(B, R, C)` produces output `(B, R, C, E)` where E is `embedding_size`.
 

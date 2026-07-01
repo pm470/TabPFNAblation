@@ -1,9 +1,9 @@
 ---
 id: CORE-002
 title: "Training Pipeline"
-status: implemented
+status: edited
 module: train.py
-last_synced: 2026-06-26
+last_synced: 2026-07-01
 ---
 
 # Training Pipeline
@@ -38,6 +38,7 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-20: Targets are reshaped to `(-1,)` and cast to `torch.long`; output is reshaped to `(-1, num_classes)`.
 - [x] AC-21: If no device is provided, `get_default_device()` is used (prefers CUDA > MPS > CPU).
 - [x] AC-21.1: At the end of training (the `train` function), if the device is CUDA, the peak GPU memory allocated is printed exactly once.
+- [x] AC-21.2: If the batch loss is `NaN`, a warning is printed and the batch is skipped without updating gradients or weights.
 
 ### NanopriorDataLoader
 

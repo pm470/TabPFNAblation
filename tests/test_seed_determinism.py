@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,6 @@ import torch
 
 from run_experiment import parse_args, run_experiment
 
-import tempfile
 TEST_OUTPUT_DIR = Path(tempfile.gettempdir()) / "tabpfn_results_test_determinism"
 
 

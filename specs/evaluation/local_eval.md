@@ -1,12 +1,12 @@
 ---
 id: EVAL-001
-title: "Local Evaluation (Breast Cancer)"
-status: implemented
+title: "Local Evaluation (Covertype)"
+status: edited
 module: train.py
-last_synced: 2026-06-25
+last_synced: 2026-07-01
 ---
 
-# Local Evaluation (Breast Cancer)
+# Local Evaluation (Covertype)
 
 ## User Story
 
@@ -17,9 +17,10 @@ As a researcher, I want a fast local evaluation on a known dataset so that I can
 ### get_eval_datasets()
 
 - [x] AC-1: Returns a list of `(X_train, X_test, y_train, y_test)` tuples.
-- [x] AC-2: Uses `sklearn.datasets.load_breast_cancer(return_X_y=True)` as the dataset.
-- [x] AC-3: Splits with `test_size=0.5` and `random_state=0` via `sklearn.model_selection.train_test_split`.
-- [x] AC-4: Currently contains exactly one dataset (breast cancer only).
+- [x] AC-2: Uses `sklearn.datasets.fetch_covtype(return_X_y=True)` as the dataset.
+- [x] AC-3: Stratified sub-samples the dataset to 2000 rows (using `train_test_split(test_size=2000, stratify=y, random_state=42)`).
+- [x] AC-4: Splits the 2000 rows with `test_size=0.5` and `random_state=0` via `train_test_split`.
+- [x] AC-4.1: Currently contains exactly one dataset (Covertype only).
 
 ### eval()
 
@@ -32,9 +33,11 @@ As a researcher, I want a fast local evaluation on a known dataset so that I can
 - [x] AC-11: Returns a dict with keys `"roc_auc"`, `"acc"`, and `"balanced_acc"`.
 - [x] AC-12: Metric values are averaged over all datasets by dividing the sum by `len(datasets)`.
 - [x] AC-13: All returned values are Python floats (cast via `float()`).
+- [x] AC-14: If the model predicts `NaN` probabilities, a warning is printed and the `NaN`s are replaced with uniform probabilities before calculating metrics to prevent failures.
 
 ## Notes
 
-- The breast cancer dataset is a standard sklearn binary classification benchmark with 569 samples and 30 features.
+- The Covertype dataset is a standard classification benchmark with 7 classes and 54 features.
+- We sub-sample it to 2000 rows to ensure `predict_proba` completes quickly without bottlenecking the training loop.
 - The 50/50 split with `random_state=0` ensures deterministic train/test partitions across runs.
 - The `multi_class="ovr"` parameter is passed to `roc_auc_score` to support multiclass extension if more datasets are added later.

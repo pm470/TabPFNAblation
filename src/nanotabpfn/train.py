@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import schedulefree
 import torch
-from sklearn.datasets import load_breast_cancer
+from sklearn.datasets import fetch_covtype
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from torch import nn
@@ -40,7 +40,13 @@ def get_default_device() -> torch.device:
 def get_eval_datasets():
     """Returns a list of (X_train, X_test, y_train, y_test) tuples for evaluation."""
     datasets = []
-    datasets.append(train_test_split(*load_breast_cancer(return_X_y=True), test_size=0.5, random_state=0))
+    # Fetch covertype but sub-sample to 2000 rows to keep eval fast
+    X, y = fetch_covtype(return_X_y=True)
+    y = y - 1  # shift labels from 1-7 to 0-6
+    # Stratified shuffle split to get exactly 2000 rows
+    _, X_sub, _, y_sub = train_test_split(X, y, test_size=2000, stratify=y, random_state=42)
+    # Then split 50/50 for train/test evaluation sets
+    datasets.append(train_test_split(X_sub, y_sub, test_size=0.5, random_state=0))
     return datasets
 
 
@@ -52,10 +58,15 @@ def eval(classifier, datasets=None):
     for X_train, X_test, y_train, y_test in datasets:
         classifier.fit(X_train, y_train)
         prob = classifier.predict_proba(X_test)
+        if np.isnan(prob).any():
+            print("Warning: NaN predictions detected during eval. Replacing with uniform probabilities.")
+            prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
         pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
         if prob.shape[1] == 2:
             prob = prob[:, 1]
-        scores["roc_auc"] += float(roc_auc_score(y_test, prob, multi_class="ovr"))
+            scores["roc_auc"] += float(roc_auc_score(y_test, prob, multi_class="ovr"))
+        else:
+            scores["roc_auc"] += float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
         scores["acc"] += float(accuracy_score(y_test, pred))
         scores["balanced_acc"] += float(balanced_accuracy_score(y_test, pred))
     scores = {k: v / len(datasets) for k, v in scores.items()}
@@ -119,6 +130,12 @@ def train(
             output = output.view(-1, output.shape[-1])
 
             loss = criterion(output, targets).mean()
+
+            if torch.isnan(loss):
+                print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
+                optimizer.zero_grad()
+                continue
+
             loss.backward()
             total_loss = loss.cpu().detach().item()
 
