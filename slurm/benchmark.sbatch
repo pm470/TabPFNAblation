@@ -44,7 +44,7 @@ CHECKPOINT="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints/step_30000.pt"
 echo "Starting TabArena Benchmark for ${CHECKPOINT}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-UV_INDEX_STRATEGY="unsafe-best-match" uv run python benchmark_model.py \
+UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/benchmark_model.py \
   --checkpoint "$CHECKPOINT" \
   --activation "$ACTIVATION" \
   --subset "lite" \
