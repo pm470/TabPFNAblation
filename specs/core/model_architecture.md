@@ -1,9 +1,9 @@
 ---
 id: CORE-001
 title: "NanoTabPFN Model Architecture"
-status: edited
+status: implemented
 module: model.py
-last_synced: 2026-07-01
+last_synced: 2026-07-03
 ---
 
 # NanoTabPFN Model Architecture
@@ -68,9 +68,9 @@ As a researcher, I want a compact tabular foundation model that encodes features
 - [x] AC-33.1: If constructor limits are not provided, they are calculated dynamically based on feature count and attention heads to target a max attention weights memory (e.g. 8.0 GiB) and clipped to a safe range (e.g. `[1000, 10000]`).
 - [x] AC-33.2: Does not print GPU memory logs from within `predict_proba` to avoid verbose log clutter.
 - [x] AC-33.3: Supports `n_ensemble` forward passes, using stratified random sampling (with different seeds) to subsample the training data while strictly preserving class balance. Falls back to uniform random sampling if a class is too small to stratify. Averages the resulting probabilities.
-- [x] AC-33.4: Uses `torch.autocast(dtype=torch.float16)` during the forward pass to halve memory usage and effectively double the context window.
-- [x] AC-34: Model output is sliced to `[:, :num_classes]` to remove unused output columns.
-- [x] AC-35: Softmax is applied over dim=1 to convert logits to probabilities.
+- [x] AC-33.4: Uses `torch.autocast(dtype=torch.bfloat16)` during the forward pass to halve memory usage. Bfloat16 is used instead of float16 because it shares float32's exponent range (max ~3.4e38), avoiding overflow→NaN issues.
+- [x] AC-34: Model output is sliced to `[:, :num_classes]` outside the autocast context to remove unused output columns.
+- [x] AC-35: Softmax is applied over dim=1 in float32, outside the autocast context, to convert logits to probabilities.
 - [x] AC-36: Output is moved to CPU and converted to numpy before returning.
 - [x] AC-37: `predict` returns `argmax(axis=1)` of `predict_proba` output.
 - [x] AC-38: Input tensors are unsqueezed to add a batch dimension of 1 and cast to `torch.float`.

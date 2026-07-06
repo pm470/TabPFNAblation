@@ -31,6 +31,12 @@ If the agent produces output that technically passes verification but doesn't ma
 
 ---
 
+## Agent Workspace Rules
+
+- **Scratch Files**: ANY temporary Python scripts, test scripts, or one-off data files created by the agent for intermediate calculations or testing MUST be stored in the agent's designated persistent scratch directory (`<appDataDir>/brain/<conversation-id>/scratch/`). They MUST NOT be placed in the project root or any codebase directory to avoid cluttering the workspace or syncing to the cluster.
+
+---
+
 ## Project Context
 
 This is a CS Master's research project (DLL course) investigating whether modern activation functions (e.g., SwiGLU, GeGLU, Mish) can improve tabular foundation models like TabPFN compared to the GELU baseline.

@@ -29,3 +29,7 @@ final_boxplot.png
 
 # test coverage
 .coverage
+
+# Temporary agent scratch files
+scratch/
+scratch_*.py
