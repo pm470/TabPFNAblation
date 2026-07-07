@@ -41,11 +41,13 @@ if [ -f "${DATA_DIR}/200k_3000x45_10.h5" ]; then
     exit 0
 fi
 
+export PYTHONUNBUFFERED=1
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/generate_prior.py \
     --output_file "${DATA_DIR}/200k_3000x45_10.h5" \
     --num_datasets 200000 \
     --max_seq_len 3000 \
     --max_features 45 \
-    --max_classes 10
+    --max_classes 10 \
+    --num_workers 8
 
 echo "Generation completed."
