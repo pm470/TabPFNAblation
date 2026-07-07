@@ -45,31 +45,22 @@ ACTIVATION="gelu"
 echo "Starting training for activation=${ACTIVATION}, seed=${SEED}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-# Safely rename the existing activation folder if it exists.
-# We use a lock directory tagged with the Slurm Job ID so that only the 
-# very first array task performs the rename, preventing race conditions.
-LOCK_DIR="${RESULTS_DIR}/.lock_${ACTIVATION}_${SLURM_ARRAY_JOB_ID}"
-if mkdir "$LOCK_DIR" 2>/dev/null; then
-    if [ -d "${RESULTS_DIR}/${ACTIVATION}" ]; then
-        RUN=1
-        while [ -d "${RESULTS_DIR}/${ACTIVATION}_run${RUN}" ]; do
-            ((RUN++))
-        done
-        mv "${RESULTS_DIR}/${ACTIVATION}" "${RESULTS_DIR}/${ACTIVATION}_run${RUN}"
-        echo "Renamed existing ${ACTIVATION} folder to ${ACTIVATION}_run${RUN}"
-    fi
+FINAL_CHECKPOINT="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints/step_05000.pt"
+if [ -f "$FINAL_CHECKPOINT" ]; then
+    echo "Seed ${SEED} for ${ACTIVATION} is already fully trained. Skipping."
+    exit 0
 fi
-
-# Ensure all array tasks wait a moment for the rename to complete across the network file system
-sleep 3
 
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python run_experiment.py \
     --activation "$ACTIVATION" \
     --seed "$SEED" \
-    --num_steps 100000 \
-    --eval_every 5000 \
-    --checkpoint_every 10000 \
-    --data_file "${DATA_DIR}/300k_500x50_10.h5" \
+    --num_steps 5000 \
+    --eval_every 250 \
+    --checkpoint_every 1000 \
+    --max_seq_len 3000 \
+    --max_features 45 \
+    --max_classes 10 \
+    --data_file "${DATA_DIR}/200k_3000x45_10.h5" \
     --output_dir "${RESULTS_DIR}"
 
 echo "Training completed."

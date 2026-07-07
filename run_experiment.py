@@ -102,12 +102,29 @@ def run_experiment(args):
     print(f"Config saved to {config_path}")
     print(f"Model parameters: {param_count:,}")
 
+    # Auto-resume logic
+    start_step = 0
+    if checkpoint_dir.exists():
+        checkpoints = list(checkpoint_dir.glob("step_*.pt"))
+        if checkpoints:
+            # Sort by step number extracted from step_XXXXX.pt
+            latest_ckpt = sorted(checkpoints, key=lambda x: int(x.stem.split("_")[1]))[-1]
+            start_step = int(latest_ckpt.stem.split("_")[1])
+            print(f"Resuming from checkpoint {latest_ckpt} at step {start_step}")
+            model.load_state_dict(torch.load(latest_ckpt, map_location=device))
+
+    if start_step >= args.num_steps:
+        print(f"Experiment already completed up to {args.num_steps} steps. Exiting.")
+        return []
+
+    remaining_steps = args.num_steps - start_step
+
     # Create dataloader
     if args.data_file:
         print(f"Loading prior data from {args.data_file}")
         prior = PriorDumpDataLoader(
             filename=args.data_file,
-            num_steps=args.num_steps,
+            num_steps=remaining_steps,
             batch_size=args.batch_size,
             device=device,
         )
@@ -116,7 +133,7 @@ def run_experiment(args):
 
         print("Generating prior data on the fly")
         dataset = NanopriorDataset(
-            num_steps=args.num_steps,
+            num_steps=remaining_steps,
             batch_size=args.batch_size,
             max_seq_len=args.max_seq_len,
             max_features=args.max_features,
@@ -136,11 +153,13 @@ def run_experiment(args):
         eval_func=eval,
         checkpoint_dir=str(checkpoint_dir),
         checkpoint_every=args.checkpoint_every,
+        start_step=start_step,
     )
 
     # Save metrics as JSONL
     metrics_path = run_dir / "metrics.jsonl"
-    with open(metrics_path, "w") as f:
+    mode = "a" if start_step > 0 else "w"
+    with open(metrics_path, mode) as f:
         for entry in eval_history:
             f.write(json.dumps(entry) + "\n")
     print(f"\nMetrics saved to {metrics_path}")

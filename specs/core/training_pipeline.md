@@ -39,6 +39,15 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-21: If no device is provided, `get_default_device()` is used (prefers CUDA > MPS > CPU).
 - [x] AC-21.1: At the end of training (the `train` function), if the device is CUDA, the peak GPU memory allocated is printed exactly once.
 - [x] AC-21.2: If the batch loss is `NaN`, a warning is printed and the batch is skipped without updating gradients or weights.
+- [x] AC-21.3: `train` accepts a `start_step` parameter to offset the logged step counter when resuming.
+
+### Auto-Resumption / Idempotency
+
+- [x] AC-21.4: `run_experiment.py` checks for existing checkpoints in the `checkpoint_dir` before starting.
+- [x] AC-21.5: If checkpoints exist, it loads the model weights from the highest `step_XXXXX.pt` file.
+- [x] AC-21.6: The dataloader's `num_steps` is automatically reduced to only process the remaining steps.
+- [x] AC-21.7: New evaluation metrics are appended to the existing `metrics.jsonl` file instead of overwriting it.
+- [x] AC-21.8: `slurm/generate_data.sbatch` and `slurm/train.sbatch` implement file existence checks (on the final HDF5 file and final checkpoint, respectively) to exit cleanly without re-running completed work.
 
 ### NanopriorDataLoader
 

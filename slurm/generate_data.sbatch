@@ -35,12 +35,17 @@ if ! command -v uv &>/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
-echo "Generating synthetic prior data to ${DATA_DIR}/300k_500x50_10.h5"
+echo "Generating synthetic prior data to ${DATA_DIR}/200k_3000x45_10.h5"
+if [ -f "${DATA_DIR}/200k_3000x45_10.h5" ]; then
+    echo "Data file already exists. Skipping generation."
+    exit 0
+fi
+
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/generate_prior.py \
-    --output_file "${DATA_DIR}/300k_500x50_10.h5" \
-    --num_datasets 300000 \
-    --max_seq_len 500 \
-    --max_features 50 \
+    --output_file "${DATA_DIR}/200k_3000x45_10.h5" \
+    --num_datasets 200000 \
+    --max_seq_len 3000 \
+    --max_features 45 \
     --max_classes 10
 
 echo "Generation completed."

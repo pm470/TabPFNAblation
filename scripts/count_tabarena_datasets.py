@@ -1,14 +1,13 @@
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
-import pandas as pd
 
 ctx = TabArenaContext()
 df = ctx.task_metadata_collection.to_dataframe()
 
 def count(rows, feats, classes):
     subset = df[
-        (df["num_instances_train"] <= rows) & 
-        (df["num_features"] <= feats) & 
-        (df["num_classes"] > 0) & 
+        (df["num_instances_train"] <= rows) &
+        (df["num_features"] <= feats) &
+        (df["num_classes"] > 0) &
         (df["num_classes"] <= classes)
     ]
     return subset["dataset_name"].nunique()

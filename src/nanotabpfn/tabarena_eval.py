@@ -180,36 +180,35 @@ def run_tabarena_eval(
     print("Generating benchmark summary...")
     try:
         import pandas as pd
-        from sklearn.metrics import roc_auc_score, log_loss
+        from sklearn.metrics import log_loss, roc_auc_score
         records = []
-        
+
         for res in job_results:
             if isinstance(res, dict):
                 task_id = res.get("task_metadata", {}).get("tid", "unknown")
                 fold = res.get("task_metadata", {}).get("fold", "unknown")
                 framework = res.get("framework")
-                
+
                 roc_auc = None
                 loss = None
-                
+
                 # Extract from simulation_artifacts if available
                 sim_artifacts = res.get("simulation_artifacts", {})
-                
+
                 # Compute metrics directly from raw predictions if available
                 if "y_test" in sim_artifacts and "pred_proba_dict_test" in sim_artifacts:
                     y_true = sim_artifacts["y_test"]
                     y_pred = sim_artifacts["pred_proba_dict_test"].get(framework)
-                    
+
                     if y_pred is not None:
                         # 1. Log Loss
                         try:
                             loss = log_loss(y_true, y_pred, labels=list(range(y_pred.shape[1])))
                         except Exception:
                             pass
-                            
+
                         # 2. ROC AUC
                         try:
-                            import numpy as np
                             if res.get("problem_type") == "binary":
                                 if y_pred.ndim == 2:
                                     roc_auc = roc_auc_score(y_true, y_pred[:, 1])
@@ -221,7 +220,7 @@ def run_tabarena_eval(
                                 roc_auc = roc_auc_score(y_true, y_pred, multi_class="ovr", labels=labels)
                         except Exception as e:
                             print(f"ROC_AUC failed for {task_id}: {e}")
-                
+
                 # Fallback to metric_error if manual calculation fails
                 if loss is None:
                     loss = res.get("metric_error")
@@ -233,7 +232,7 @@ def run_tabarena_eval(
                         "roc_auc": roc_auc,
                         "log_loss": loss
                     })
-                    
+
         if not records:
             print("\nWarning: Could not extract metric scores directly from the job_results list.")
             print("Job results sample keys:", list(job_results[0].keys()) if job_results else "Empty")
@@ -241,16 +240,16 @@ def run_tabarena_eval(
             df = pd.DataFrame(records)
             print(f"\nTabArena evaluation completed. Results in {results_dir}")
             print("\nFinal Mean Scores (over all datasets & folds):")
-            
+
             # Print mean of numeric columns only
             mean_scores = df.mean(numeric_only=True)
             print(mean_scores.to_string())
-            
+
             # Save to CSV
             out_csv = Path(results_dir) / "nanotabpfn_summary.csv"
             df.groupby("task_id").mean(numeric_only=True).to_csv(out_csv)
             print(f"\nSaved per-dataset summary to: {out_csv}")
-            
+
     except Exception as e:
         print(f"\nTabArena evaluation completed. Results in {results_dir}")
         print(f"Failed to generate summary: {e}")

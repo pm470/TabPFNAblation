@@ -342,6 +342,9 @@ class NanoTabPFNClassifier:
         # If the dataset is small enough, no subsampling is needed.
         # Since nanoTabPFN does not yet do feature/label permutations, running
         # multiple identical ensembles would be a waste of compute.
+        # Note: We keep this ensembling logic because while pretraining only targets up to 3000 rows
+        # (which easily fits in context), the full TabArena benchmark evaluates on datasets with 10k+ rows,
+        # making ensembling necessary to utilize the full training folds without OOMing.
         actual_ensemble_size = self.n_ensemble if len(self.X_train) > max_train_samples else 1
 
         for ensemble_idx in range(actual_ensemble_size):

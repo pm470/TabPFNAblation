@@ -8,7 +8,6 @@ import h5py
 import numpy as np
 import schedulefree
 import torch
-from sklearn.datasets import fetch_covtype
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from torch import nn
@@ -39,14 +38,43 @@ def get_default_device() -> torch.device:
 
 def get_eval_datasets():
     """Returns a list of (X_train, X_test, y_train, y_test) tuples for evaluation."""
+    import numpy as np
+    import pandas as pd
+    from sklearn.datasets import fetch_openml
+    from sklearn.preprocessing import LabelEncoder
+
     datasets = []
-    # Fetch covertype but sub-sample to 2000 rows to keep eval fast
-    X, y = fetch_covtype(return_X_y=True)
-    y = y - 1  # shift labels from 1-7 to 0-6
-    # Stratified shuffle split to get exactly 2000 rows
-    _, X_sub, _, y_sub = train_test_split(X, y, test_size=2000, stratify=y, random_state=42)
-    # Then split 50/50 for train/test evaluation sets
-    datasets.append(train_test_split(X_sub, y_sub, test_size=0.5, random_state=0))
+
+    def fetch_and_prep(name, subsample_n=None):
+        try:
+            X, y = fetch_openml(name, version=1, parser="auto", return_X_y=True)
+
+            # Simple conversion for ablation eval
+            if isinstance(X, pd.DataFrame):
+                X = X.copy()
+                for col in X.select_dtypes(include=['category', 'object']).columns:
+                    X[col] = X[col].astype('category').cat.codes
+                X = X.fillna(0).values.astype(np.float32)
+
+            y = np.array(LabelEncoder().fit_transform(y), dtype=np.int64)
+
+            if subsample_n and len(X) > subsample_n:
+                _, X, _, y = train_test_split(X, y, test_size=subsample_n, stratify=y, random_state=42)
+
+            return train_test_split(X, y, test_size=0.5, random_state=42)
+        except Exception as e:
+            print(f"Failed to fetch/prep {name}: {e}")
+            return None
+
+    for d in ["diabetes", "blood-transfusion-service-center"]:
+        res = fetch_and_prep(d)
+        if res is not None:
+            datasets.append((d, *res))
+
+    amazon = fetch_and_prep("amazon_employee_access", subsample_n=2000)
+    if amazon is not None:
+        datasets.append(("amazon_employee_access", *amazon))
+
     return datasets
 
 
@@ -54,22 +82,37 @@ def eval(classifier, datasets=None):
     """Evaluate classifier on datasets."""
     if datasets is None:
         datasets = get_eval_datasets()
-    scores: dict[str, float] = {"roc_auc": 0.0, "acc": 0.0, "balanced_acc": 0.0}
-    for X_train, X_test, y_train, y_test in datasets:
+    scores: dict = {"roc_auc": 0.0, "acc": 0.0, "balanced_acc": 0.0, "datasets": {}}
+    for name, X_train, X_test, y_train, y_test in datasets:
         classifier.fit(X_train, y_train)
         prob = classifier.predict_proba(X_test)
         if np.isnan(prob).any():
             print("Warning: NaN predictions detected during eval. Replacing with uniform probabilities.")
             prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
         pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
+        
         if prob.shape[1] == 2:
             prob = prob[:, 1]
-            scores["roc_auc"] += float(roc_auc_score(y_test, prob, multi_class="ovr"))
+            ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
         else:
-            scores["roc_auc"] += float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
-        scores["acc"] += float(accuracy_score(y_test, pred))
-        scores["balanced_acc"] += float(balanced_accuracy_score(y_test, pred))
-    scores = {k: v / len(datasets) for k, v in scores.items()}
+            ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
+            
+        ds_acc = float(accuracy_score(y_test, pred))
+        ds_bal_acc = float(balanced_accuracy_score(y_test, pred))
+        
+        scores["datasets"][name] = {
+            "roc_auc": ds_roc_auc,
+            "acc": ds_acc,
+            "balanced_acc": ds_bal_acc
+        }
+        
+        scores["roc_auc"] += ds_roc_auc
+        scores["acc"] += ds_acc
+        scores["balanced_acc"] += ds_bal_acc
+
+    scores["roc_auc"] /= len(datasets)
+    scores["acc"] /= len(datasets)
+    scores["balanced_acc"] /= len(datasets)
     return scores
 
 
@@ -83,6 +126,7 @@ def train(
     checkpoint_dir: str | None = None,
     checkpoint_every: int | None = None,
     checkpoint_every_minutes: float | None = None,
+    start_step: int = 0,
 ):
     """Trains our model on the given prior using the given criterion.
 
@@ -97,6 +141,7 @@ def train(
         checkpoint_dir: (str|None) directory to save model checkpoints to
         checkpoint_every: (int|None) save a checkpoint every N steps
         checkpoint_every_minutes: (float|None) save a checkpoint every N minutes
+        start_step: (int) the starting step to offset logging when resuming
 
     Returns:
         (model) our trained numpy model
@@ -115,7 +160,8 @@ def train(
     eval_history = []
     last_checkpoint_time = time.time()
     try:
-        for step, full_data in enumerate(prior):
+        for i, full_data in enumerate(prior):
+            step = start_step + i
             step_start_time = time.time()
             train_test_split_index = full_data["train_test_split_index"]
             # if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):

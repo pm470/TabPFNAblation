@@ -1,98 +1,86 @@
-# TabPFN Activation Function Ablation Study
+# NanoTabPFN Activation Function Ablation Study
 
-Investigating whether modern activation functions (SwiGLU, GeGLU, Mish, etc.) can improve [nanoTabPFN](https://github.com/automl/nanoTabPFN) compared to the GELU baseline.
+This project investigates whether modern activation functions (SwiGLU, GeGLU, Mish, etc.) improve the performance of tabular foundation models compared to the standard GELU baseline. The codebase is a specialized, distributed fork built on top of [nanoTabPFN](https://github.com/automl/nanoTabPFN).
 
-## Setup
+## Local Setup & Development
 
-Requires [mise](https://mise.jdx.dev/) and a ROCm-compatible AMD GPU.
-
-```bash
-mise install                # Python 3.11 + uv
-uv sync --extra dev         # all dependencies
-```
-
-Download the prior data dump (~990MB) from [figshare](https://figshare.com/s/63fc1ada93e42e388e63) into the project root.
-
-## Usage
+This project uses [mise](https://mise.jdx.dev/) for Python version management and `uv` for dependency resolution.
 
 ```bash
-# Single experiment (fast local breast_cancer eval)
-python run_experiment.py --activation gelu --seed 0
-
-# Single experiment with full TabArena evaluation at the end
-python run_experiment.py --activation gelu --seed 0 --benchmark tabarena
-
-# All seed × activation combos (default breast_cancer)
-bash run_all.sh
-
-# Plot results
-python plot_results.py
-
-# Tests & linting
-uv run pytest -v
-uv run ruff check .
+mise install                # Installs Python 3.11 + uv
+uv sync --extra dev         # Installs all dependencies including torch/rocm
 ```
 
-Results are written to `results/<activation>/seed_<N>/` with `config.json`, `metrics.jsonl`, and `checkpoints/`.
+**Testing & Formatting:**
 
-## Running on the Cluster (bwUniCluster 3.0)
+```bash
+bash scripts/verify.sh      # Runs ruff, pyright, and pytest
+```
 
-To run and monitor experiments on the bwUniCluster, follow these steps:
+---
 
-### 1. Connect & Setup
+## Cluster Workflow (bwUniCluster 3.0)
 
-Make sure you are connected to the university VPN or eduroam network.
-First, set up your cluster connection details in a `.env` file (copy from `.env.example`).
+Due to the scale of the ablation study, experiments are designed to run on the cluster utilizing **Slurm Job Arrays** and **Fair-Share Orchestration** across multiple cluster accounts.
 
-### 2. Transfer Code and Data
+The pipeline is fully automated and idempotent.
 
-Use the provided sync script to transfer your code to the cluster:
+### 1. Initial Setup
+
+Copy `.env.example` to `.env` and fill in your cluster connection details. Ensure your `WORKSPACE_DIR` points to a shared scratch workspace.
+
+Sync your local code to the cluster (this excludes heavy data/checkpoints automatically):
 
 ```bash
 bash scripts/sync.sh
 ```
 
-*Note:* The sync script excludes the large prior data dump (`300k_150x5_2.h5`). You will need to manually copy it once to your cluster directory if you haven't already:
+### 2. Generate Pretraining Data (Run Once)
+
+The model requires a massive prior dataset to pretrain. Log into the cluster and run the data generation script. It will generate a dataset tailored to our ablation bounds (200,000 datasets, up to 3000 rows, 45 features, 10 classes).
 
 ```bash
-rsync -avz --progress ~/code/TabPFNAblation/300k_150x5_2.h5 <username>@uc3.scc.kit.edu:~/TabPFNAblation/
+sbatch slurm/generate_data.sbatch
 ```
 
-### 3. Submit Jobs
+*Note: This is idempotent. If the `.h5` file already exists, it exits safely.*
 
-Log into the cluster and submit your SLURM jobs from the `slurm` directory:
+### 3. Fair-Share Orchestration (Submitting Experiments)
+
+We have split the 15 target activation functions into 3 "chunks". To maximize cluster priority (fair-share), you should run each chunk from a different collaborator's account.
+
+Once the 15 target functions are decided, edit the arrays in `slurm/submit_chunk.sh`. Then distribute the execution:
 
 ```bash
-ssh <username>@uc3.scc.kit.edu
-cd ~/TabPFNAblation
+# Collaborator 1 logs in and runs:
+bash slurm/submit_chunk.sh 1
 
-# Example: Submit a benchmark job
-sbatch slurm/benchmark.sbatch
+# Collaborator 2 logs in and runs:
+bash slurm/submit_chunk.sh 2
+
+# Collaborator 3 logs in and runs:
+bash slurm/submit_chunk.sh 3
 ```
 
-### 4. Monitor & Manage Jobs
+**What this script does:**
 
-Use standard SLURM commands to monitor your jobs:
+1. Submits an independent Slurm array of 10 training seeds for each activation in the chunk.
+2. Automatically queues the TabArena benchmark evaluation to run *only* after the corresponding training array finishes successfully (`--dependency=afterok`).
+3. **Idempotency:** If jobs are interrupted, simply re-run the script. It will detect existing checkpoints and automatically resume training exactly where it left off without overwriting logs!
+
+### 4. Fetching & Plotting Results (WIP)
+
+Once jobs complete, pull the `results/` directory back from your shared workspace to your local machine:
 
 ```bash
-# Check for available idle nodes
-sinfo_t_idle
-
-# Check the status of your jobs
-squeue -u $USER
-
-# Check expected start times for pending jobs
-squeue --start -u $USER
-
-# View the output and error logs
-# (Assuming your job writes to logs/ directory, e.g., logs/tabpfn_tabarena_<JOBID>.out)
-tail -f logs/tabpfn_tabarena_<JOBID>.out
+# Make sure to replace the workspace path with your actual allocated workspace string
+rsync -avz <username>@uc3.scc.kit.edu:/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn_data/results/ ~/code/TabPFNAblation/results/
 ```
 
-### 5. Retrieve Results
+During training, models are periodically evaluated against diverse OpenML datasets (Diabetes, Blood Transfusion, Amazon Employee Access). The raw metrics are saved in deeply nested structures per-dataset inside `metrics.jsonl`.
 
-Once the job is completed, you can sync the `results` directory back to your local machine:
+To generate the final training curves and box-and-whisker plots:
 
 ```bash
-rsync -avz <username>@uc3.scc.kit.edu:~/TabPFNAblation/results/ ~/code/TabPFNAblation/results/
+uv run python scripts/plot_results.py
 ```
