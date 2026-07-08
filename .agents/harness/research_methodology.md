@@ -13,13 +13,13 @@ When comparing activation functions, **ONLY the activation changes**. Everything
 | Parameter | Value |
 |---|---|
 | Embedding dim | 96 |
-| Attention heads | 4 |
+| Attention heads | 3 |
 | MLP hidden dim | 192 |
 | Transformer layers | 3 |
 | Output classes | 2 |
 | Learning rate | 4e-3 |
 | Batch size | 32 |
-| Training steps | 2500 |
+| Training steps | 5000 |
 
 Changing any of these invalidates the comparison unless explicitly studying that axis (e.g., depth ablation in phase 5).
 
@@ -47,8 +47,8 @@ Changing any of these invalidates the comparison unless explicitly studying that
 
 | Stage | Benchmark | Purpose |
 |---|---|---|
-| Development | `breast_cancer` | Fast iteration (seconds per run) |
-| Final results | TabArena | Publication-quality evaluation (cluster, 48GB+ VRAM) |
+| Development | `diabetes`, `blood-transfusion`, `amazon_employee_access` | Fast iteration/sanity check (`--benchmark quick`) |
+| Final results | TabArena | Publication-quality evaluation (`--benchmark tabarena`) |
 
-- Do not draw conclusions from `breast_cancer` results — it is a sanity check only
-- TabArena runs use the `lite` subset for testing, `full` (51 datasets) for final numbers
+- Do not draw conclusions from the development datasets — they are a sanity check only.
+- TabArena runs use the `nanotabpfn` subset for testing, `classification` for final numbers.

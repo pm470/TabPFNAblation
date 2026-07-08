@@ -29,8 +29,8 @@ def parse_args(argv=None):
     parser.add_argument(
         "--benchmark",
         type=str,
-        choices=["breast_cancer", "tabarena"],
-        default="breast_cancer",
+        choices=["quick", "tabarena"],
+        default="quick",
         help="Benchmark to use for final evaluation",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
@@ -45,7 +45,7 @@ def parse_args(argv=None):
     parser.add_argument("--max_features", type=int, default=45, help="Maximum number of features per dataset")
     parser.add_argument("--max_classes", type=int, default=10, help="Maximum number of classes per dataset")
     parser.add_argument("--embedding_size", type=int, default=96, help="Embedding size")
-    parser.add_argument("--num_attention_heads", type=int, default=4, help="Number of attention heads")
+    parser.add_argument("--num_attention_heads", type=int, default=3, help="Number of attention heads")
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
     parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
@@ -182,7 +182,7 @@ def run_experiment(args):
         print(f"Final scores: {final_scores}")
         if device.type == "cuda":
             peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
-            print(f"[NanoTabPFN] Peak GPU memory allocated for benchmark breast_cancer: {peak_mem_gb:.2f} GB")
+            print(f"[NanoTabPFN] Peak GPU memory allocated for benchmark {args.benchmark}: {peak_mem_gb:.2f} GB")
 
         # Save final local scores to a separate file so we don't mix them with step metrics
         final_scores_path = run_dir / "final_scores.json"

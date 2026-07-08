@@ -21,7 +21,7 @@ def parse_args():
 
     # Model architecture args (must match training)
     parser.add_argument("--embedding_size", type=int, default=96)
-    parser.add_argument("--num_attention_heads", type=int, default=4)
+    parser.add_argument("--num_attention_heads", type=int, default=3)
     parser.add_argument("--mlp_hidden_size", type=int, default=192)
     parser.add_argument("--num_layers", type=int, default=3)
     parser.add_argument("--num_outputs", type=int, default=10)

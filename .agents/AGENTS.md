@@ -68,15 +68,15 @@ Modern activation functions might yield statistically significant improvements c
 
 ## Evaluation Strategy
 
-- **Fast local eval:** `sklearn.datasets.load_breast_cancer` — quick sanity check during development (`--benchmark breast_cancer`).
-- **Full eval (on cluster):** TabArena benchmark (`--benchmark tabarena`). Currently runs the `lite` subset for testing, can be switched to `classification` (all classification datasets) in `tabarena_eval.py` when running on the cluster.
+- **Fast local eval:** `diabetes`, `blood-transfusion-service-center`, and `amazon_employee_access` (subsampled) — robust sanity check during development (`--benchmark quick`).
+- **Full eval (on cluster):** TabArena benchmark (`--benchmark tabarena`). Currently runs the `nanotabpfn` subset for testing, can be switched to `classification` (all classification datasets) in `tabarena_eval.py` when running on the cluster.
 
 ## Key Design Decisions
 
 - **Gated activations (SwiGLU, GeGLU, ReGLU)** will use identical parameter counts to non-gated variants (LLaMA-style `E → 2*(2H/3)` trick) for fair comparison.
 - **Seed determinism** is critical: `torch.cuda.manual_seed_all`, `cudnn.deterministic=True`, `cudnn.benchmark=False`. Verified by pytest.
-- Default training: 2500 steps, batch_size=32, lr=4e-3, eval every 25 steps, checkpoint every 250 steps.
-- Model: 356K params (embedding=96, heads=4, mlp_hidden=192, layers=3, outputs=2).
+- Default training: 5000 steps, batch_size=32, lr=4e-3, eval every 250 steps, checkpoint every 1000 steps. Mixed-precision (bfloat16) enabled.
+- Model: 356K params (embedding=96, heads=3, mlp_hidden=192, layers=3, outputs=2). Heads changed to 3 to unlock FlashAttention on A100. Feature attention is chunked to avoid CUDA grid limits.
 
 ## Research Plan
 

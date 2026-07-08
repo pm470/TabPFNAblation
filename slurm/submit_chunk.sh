@@ -30,24 +30,54 @@ case $CHUNK in
   ;;
 esac
 
+if [ -f .env ]; then
+  source .env
+fi
+WORKSPACE_DIR="${WORKSPACE_DIR:-/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn_data}"
+RESULTS_DIR="${WORKSPACE_DIR}/results"
+
 echo "====================================================="
 echo "Submitting Chunk $CHUNK"
 echo "Activations: ${ACTIVATIONS[*]}"
 echo "====================================================="
 
 for act in "${ACTIVATIONS[@]}"; do
-  echo "-> Submitting Training Array (10 seeds) for: $act"
-  # sbatch --parsable returns just the Job ID so we can capture it for the dependency
-  TRAIN_ID=$(sbatch --parsable --array=0-9 --export=ALL,ACTIVATION="$act" slurm/train.sbatch)
+  TRAIN_SEEDS=""
+  BENCH_SEEDS=""
+  
+  for seed in {0..9}; do
+    # Check if training is completed
+    if [ ! -f "${RESULTS_DIR}/${act}/seed_${seed}/checkpoints/final.pt" ]; then
+      TRAIN_SEEDS="${TRAIN_SEEDS}${TRAIN_SEEDS:+,}${seed}"
+    fi
+    # Check if benchmarking is completed
+    if [ ! -f "${RESULTS_DIR}/${act}/seed_${seed}/tabarena_exp/nanotabpfn_summary.csv" ]; then
+      BENCH_SEEDS="${BENCH_SEEDS}${BENCH_SEEDS:+,}${seed}"
+    fi
+  done
 
-  echo "   [Train Job ID: $TRAIN_ID]"
+  echo "-> Status for: $act"
 
-  echo "-> Submitting Benchmark Array (10 seeds) for: $act"
-  # The benchmark array will wait peacefully in the queue until the training array succeeds
-  BENCH_ID=$(sbatch --parsable --dependency=afterok:"$TRAIN_ID" --array=0-9 --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+  if [ -z "$TRAIN_SEEDS" ]; then
+    echo "   [Training fully complete. Skipping train job.]"
+    TRAIN_ID=""
+  else
+    TRAIN_ID=$(sbatch --parsable --array="$TRAIN_SEEDS" --export=ALL,ACTIVATION="$act" slurm/train.sbatch)
+    echo "   [Train Job ID: $TRAIN_ID (Queued Seeds: $TRAIN_SEEDS)]"
+  fi
 
-  echo "   [Benchmark Job ID: $BENCH_ID (waiting on $TRAIN_ID)]"
+  if [ -z "$BENCH_SEEDS" ]; then
+    echo "   [Benchmarking fully complete. Skipping bench job.]"
+  else
+    if [ -n "$TRAIN_ID" ]; then
+      BENCH_ID=$(sbatch --parsable --dependency=afterok:"$TRAIN_ID" --array="$BENCH_SEEDS" --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+      echo "   [Benchmark Job ID: $BENCH_ID (Queued Seeds: $BENCH_SEEDS, waiting on $TRAIN_ID)]"
+    else
+      BENCH_ID=$(sbatch --parsable --array="$BENCH_SEEDS" --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+      echo "   [Benchmark Job ID: $BENCH_ID (Queued Seeds: $BENCH_SEEDS, starting immediately)]"
+    fi
+  fi
   echo "-----------------------------------------------------"
 done
 
-echo "Done! All jobs for chunk $CHUNK have been handed over to Slurm."
+echo "Done! All necessary jobs for chunk $CHUNK have been handed over to Slurm."

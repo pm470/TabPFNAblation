@@ -29,6 +29,11 @@ plot_results.py → (reads files only, no code imports from other modules)
 - `train.py` receives hyperparameters as function arguments — **never hardcode defaults in `train.py`**
 - `model.py` receives architecture params via constructor arguments
 
+## Hardware Optimization & Precision
+- **FlashAttention:** `num_attention_heads` must divide embedding dim such that `head_dim` is 32, 64, or 128 (e.g., embedding=96, heads=3 → head_dim=32). Also `need_weights=False` is required.
+- **CUDA Grids:** Feature attention uses a chunking loop (`chunk_size=16000`) to avoid maximum CUDA grid dimension limits (65535).
+- **Precision:** The training loop utilizes `torch.autocast(dtype=torch.bfloat16)` to halve memory footprint with no scaling needed.
+
 ## Adding New Activation Functions
 
 1. Implement the activation class or function in `model.py`

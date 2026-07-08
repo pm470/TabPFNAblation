@@ -169,13 +169,14 @@ def train(
             data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
-            output = model(data, train_test_split_index=train_test_split_index)
-            targets = targets[:, train_test_split_index:]
+            with torch.autocast(device_type=device.type if device.type != "mps" else "cpu", dtype=torch.bfloat16, enabled=device.type != "cpu"):
+                output = model(data, train_test_split_index=train_test_split_index)
+                targets = targets[:, train_test_split_index:]
 
-            targets = targets.reshape((-1,)).to(torch.long)
-            output = output.view(-1, output.shape[-1])
+                targets = targets.reshape((-1,)).to(torch.long)
+                output = output.view(-1, output.shape[-1])
 
-            loss = criterion(output, targets).mean()
+                loss = criterion(output, targets).mean()
 
             if torch.isnan(loss):
                 print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
@@ -200,7 +201,7 @@ def train(
                 scores = eval_func(classifier)
                 entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, **scores}
                 eval_history.append(entry)
-                score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items()])
+                score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
 
                 model.train()

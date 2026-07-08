@@ -2,7 +2,7 @@
 #SBATCH --job-name=tabpfn_gen_data
 #SBATCH --output=logs/gen_data_%j.out
 #SBATCH --error=logs/gen_data_%j.err
-#SBATCH --time=12:00:00
+#SBATCH --time=04:30:00
 #SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
@@ -17,9 +17,9 @@ module load compiler/gnu 2>/dev/null || true
 
 # Load environment variables if .env exists
 if [ -f .env ]; then
-    set -a
-    source .env
-    set +a
+  set -a
+  source .env
+  set +a
 fi
 
 # Fallback to the cluster workspace path if not defined in .env
@@ -37,17 +37,17 @@ fi
 
 echo "Generating synthetic prior data to ${DATA_DIR}/200k_3000x45_10.h5"
 if [ -f "${DATA_DIR}/200k_3000x45_10.h5" ]; then
-    echo "Data file already exists. Skipping generation."
-    exit 0
+  echo "Data file already exists. Skipping generation."
+  exit 0
 fi
 
 export PYTHONUNBUFFERED=1
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/generate_prior.py \
-    --output_file "${DATA_DIR}/200k_3000x45_10.h5" \
-    --num_datasets 200000 \
-    --max_seq_len 3000 \
-    --max_features 45 \
-    --max_classes 10 \
-    --num_workers 8
+  --output_file "${DATA_DIR}/200k_3000x45_10.h5" \
+  --num_datasets 200000 \
+  --max_seq_len 3000 \
+  --max_features 45 \
+  --max_classes 10 \
+  --num_workers 8
 
 echo "Generation completed."

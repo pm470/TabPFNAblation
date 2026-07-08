@@ -2,7 +2,7 @@
 #SBATCH --job-name=tabpfn_train
 #SBATCH --output=logs/train_%A_%a.out
 #SBATCH --error=logs/train_%A_%a.err
-#SBATCH --time=16:00:00
+#SBATCH --time=02:00:00
 #SBATCH --partition=gpu_a100_il
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
@@ -18,9 +18,9 @@ module load compiler/gnu toolkit/nvidia-hpc-sdk/25.1 2>/dev/null || true
 
 # Load environment variables
 if [ -f .env ]; then
-    set -a
-    source .env
-    set +a
+  set -a
+  source .env
+  set +a
 fi
 
 # Fallback to the cluster workspace path if not defined in .env
@@ -38,29 +38,29 @@ if ! command -v uv &>/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
-SEEDS=(0)
-SEED=${SEEDS[$SLURM_ARRAY_TASK_ID]}
-ACTIVATION="gelu"
+# Use the SLURM array task ID directly as the seed (0-9)
+SEED=${SLURM_ARRAY_TASK_ID:-0}
+ACTIVATION="${ACTIVATION:-gelu}"
 
 echo "Starting training for activation=${ACTIVATION}, seed=${SEED}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-FINAL_CHECKPOINT="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints/step_05000.pt"
+FINAL_CHECKPOINT="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints/final.pt"
 if [ -f "$FINAL_CHECKPOINT" ]; then
-    echo "Seed ${SEED} for ${ACTIVATION} is already fully trained. Skipping."
-    exit 0
+  echo "Seed ${SEED} for ${ACTIVATION} is already fully trained. Skipping."
+  exit 0
 fi
 
-UV_INDEX_STRATEGY="unsafe-best-match" uv run python run_experiment.py \
-    --activation "$ACTIVATION" \
-    --seed "$SEED" \
-    --num_steps 5000 \
-    --eval_every 250 \
-    --checkpoint_every 1000 \
-    --max_seq_len 3000 \
-    --max_features 45 \
-    --max_classes 10 \
-    --data_file "${DATA_DIR}/200k_3000x45_10.h5" \
-    --output_dir "${RESULTS_DIR}"
+UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u run_experiment.py \
+  --activation "$ACTIVATION" \
+  --seed "$SEED" \
+  --num_steps 5000 \
+  --eval_every 250 \
+  --checkpoint_every 1000 \
+  --max_seq_len 3000 \
+  --max_features 45 \
+  --max_classes 10 \
+  --data_file "${DATA_DIR}/200k_3000x45_10.h5" \
+  --output_dir "${RESULTS_DIR}"
 
 echo "Training completed."
