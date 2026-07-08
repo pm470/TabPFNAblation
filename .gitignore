@@ -1,3 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# Data
 *.h5
-train_*.err
-train_*.err
+
+# Local config
+.env
+uv.toml
+
+# Results (generated, don't commit)
+results/
+results_test/
+results_test_determinism/
+
+# Plots (generated)
+training_curves.png
+final_boxplot.png
+
+# IDE
+.idea/
+.vscode/
+
+# test coverage
+.coverage
+
+# Temporary agent scratch files
+scratch/
+scratch_*.py
