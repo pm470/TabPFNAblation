@@ -3,7 +3,7 @@ id: CORE-003
 title: "Seed Determinism"
 status: implemented
 module: train.py
-last_synced: 2026-06-25
+last_synced: 2026-07-10
 ---
 
 # Seed Determinism
@@ -30,7 +30,7 @@ As a researcher, I want full control over random seeds so that experiments are e
 
 ## Notes
 
-- The determinism tests (`test_seed_determinism.py`) validate AC-7 and AC-8 by running short experiments (10 steps, eval every 5) and comparing the recorded loss values from `metrics.jsonl`.
+- The determinism tests (`test_seed_determinism.py`) validate AC-7 and AC-8 by running short experiments (2 steps, eval every 1) and comparing the recorded loss values from `metrics.jsonl`.
 - `cudnn.benchmark = False` disables cuDNN's auto-tuning, which can introduce non-determinism when selecting algorithms.
 - `cudnn.deterministic = True` forces cuDNN to use deterministic algorithms even if they are slower.
 - The seed is set before model initialization and data loading to ensure both weight initialization and data ordering are deterministic.

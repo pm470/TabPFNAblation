@@ -56,7 +56,7 @@ run_step() {
     fi
 }
 
-run_info_step() {
+run_test_step() {
     local step_num="$1"
     local step_name="$2"
     shift 2
@@ -65,8 +65,17 @@ run_info_step() {
     STEP_NAMES+=("$step_name")
     printf "${BLUE}[%s]${NC} ${BOLD}%s${NC} ... \n" "$step_num" "$step_name"
 
-    "${cmd[@]}" 2>&1
-    STEP_RESULTS+=("info")
+    "${cmd[@]}"
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        STEP_RESULTS+=("pass")
+        printf "%b\n" "$PASS"
+    else
+        STEP_RESULTS+=("fail")
+        printf "%b\n" "$FAIL"
+        OVERALL=1
+    fi
     echo ""
 }
 
@@ -76,19 +85,16 @@ echo -e "${BOLD}=== TabPFN Ablation — Verification Harness ===${NC}"
 echo ""
 
 # Step 1: Ruff lint
-run_step "1/5" "Ruff lint" uv run ruff check .
+run_step "1/4" "Ruff lint" uv run ruff check .
 
 # Step 2: Ruff format
-run_step "2/5" "Ruff format check" uv run ruff format --check .
+run_step "2/4" "Ruff format check" uv run ruff format --check .
 
 # Step 3: Pyright
-run_step "3/5" "Pyright type check" uv run pyright
+run_step "3/4" "Pyright type check" uv run pyright
 
-# Step 4: Pytest
-run_step "4/5" "Pytest" uv run pytest tests/ -x -q
-
-# Step 5: Coverage (informational only — never fails the build)
-run_info_step "5/5" "Coverage report (informational)" uv run pytest tests/ --cov=. --cov-report=term-missing -q --no-header --override-ini="addopts="
+# Step 4: Pytest & Coverage
+run_test_step "4/4" "Pytest and Coverage" uv run pytest tests/ --cov=. --cov-report=term-missing -q --no-header --override-ini="addopts="
 
 # =============================================================================
 # Summary

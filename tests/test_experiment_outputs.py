@@ -2,8 +2,6 @@
 
 import json
 import shutil
-
-# Use a temporary output dir for tests
 import tempfile
 from pathlib import Path
 
@@ -12,34 +10,23 @@ import torch
 
 from run_experiment import parse_args, run_experiment
 
-TEST_OUTPUT_DIR = Path(tempfile.gettempdir()) / "tabpfn_results_test"
 
-
-@pytest.fixture(autouse=True)
-def cleanup_test_outputs():
-    """Clean up test output directory before and after each test."""
-    if TEST_OUTPUT_DIR.exists():
-        shutil.rmtree(TEST_OUTPUT_DIR)
-    yield
-    if TEST_OUTPUT_DIR.exists():
-        shutil.rmtree(TEST_OUTPUT_DIR)
-    torch.cuda.empty_cache()
-
-
-def run_short_experiment(seed=0, num_steps=10, eval_every=5, checkpoint_every=5):
-    """Helper to run a short experiment for testing."""
+@pytest.fixture(scope="module")
+def experiment_output_dir():
+    """Run a single short experiment once for the entire module to check output files."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="tabpfn_results_test_"))
     args = parse_args(
         [
             "--seed",
-            str(seed),
+            "0",
             "--num_steps",
-            str(num_steps),
+            "2",
             "--eval_every",
-            str(eval_every),
+            "1",
             "--checkpoint_every",
-            str(checkpoint_every),
+            "1",
             "--output_dir",
-            str(TEST_OUTPUT_DIR),
+            str(temp_dir),
             "--activation",
             "gelu",
             "--batch_size",
@@ -50,14 +37,16 @@ def run_short_experiment(seed=0, num_steps=10, eval_every=5, checkpoint_every=5)
             "10",
         ]
     )
-    return run_experiment(args)
+    run_experiment(args)
+    yield temp_dir
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+    torch.cuda.empty_cache()
 
 
-def test_config_json_created():
+def test_config_json_created(experiment_output_dir):
     """config.json exists and contains expected fields."""
-    run_short_experiment()
-
-    config_path = TEST_OUTPUT_DIR / "gelu" / "seed_0" / "config.json"
+    config_path = experiment_output_dir / "gelu" / "seed_0" / "config.json"
     assert config_path.exists(), f"config.json not found at {config_path}"
 
     with open(config_path) as f:
@@ -70,11 +59,9 @@ def test_config_json_created():
     assert config["param_count"] > 0
 
 
-def test_metrics_jsonl_valid():
+def test_metrics_jsonl_valid(experiment_output_dir):
     """metrics.jsonl exists, is valid JSONL, and has expected keys."""
-    run_short_experiment(num_steps=10, eval_every=5)
-
-    metrics_path = TEST_OUTPUT_DIR / "gelu" / "seed_0" / "metrics.jsonl"
+    metrics_path = experiment_output_dir / "gelu" / "seed_0" / "metrics.jsonl"
     assert metrics_path.exists(), f"metrics.jsonl not found at {metrics_path}"
 
     entries = []
@@ -92,11 +79,9 @@ def test_metrics_jsonl_valid():
         assert expected_keys.issubset(entry.keys()), f"Missing keys in entry: {expected_keys - entry.keys()}"
 
 
-def test_metrics_values_finite():
+def test_metrics_values_finite(experiment_output_dir):
     """All metric values are finite (no NaN/Inf)."""
-    run_short_experiment(num_steps=10, eval_every=5)
-
-    metrics_path = TEST_OUTPUT_DIR / "gelu" / "seed_0" / "metrics.jsonl"
+    metrics_path = experiment_output_dir / "gelu" / "seed_0" / "metrics.jsonl"
     with open(metrics_path) as f:
         for line in f:
             entry = json.loads(line.strip())
@@ -106,14 +91,12 @@ def test_metrics_values_finite():
                 assert abs(val) != float("inf"), f"{key} is Inf"
 
 
-def test_checkpoints_created():
+def test_checkpoints_created(experiment_output_dir):
     """Checkpoint files are created at the expected intervals."""
-    run_short_experiment(num_steps=10, eval_every=5, checkpoint_every=5)
-
-    checkpoint_dir = TEST_OUTPUT_DIR / "gelu" / "seed_0" / "checkpoints"
+    checkpoint_dir = experiment_output_dir / "gelu" / "seed_0" / "checkpoints"
     assert checkpoint_dir.exists(), f"Checkpoint dir not found at {checkpoint_dir}"
 
-    # Should have step_00005.pt, step_00010.pt, and final.pt
+    # Should have step_00001.pt, step_00002.pt, and final.pt
     checkpoint_files = list(checkpoint_dir.glob("*.pt"))
     assert len(checkpoint_files) >= 2, (
         f"Expected at least 2 checkpoints, got {len(checkpoint_files)}: {checkpoint_files}"
