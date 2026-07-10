@@ -387,20 +387,12 @@ class NanoTabPFNClassifier:
                 x = np.concatenate((X_train_sub, X_test_chunk))
                 y = y_train_sub
 
-                # Use autocast for mixed precision (saves memory, allows larger context)
-                # bfloat16 has the same memory footprint as float16 but shares float32's
-                # exponent range (max ~3.4e38), avoiding the overflow→NaN issue of float16
-                device_type = self.device.type if self.device.type != "mps" else "cpu"
                 with torch.no_grad():
-                    with torch.autocast(
-                        device_type=device_type, dtype=torch.bfloat16, enabled=self.device.type != "cpu"
-                    ):
-                        x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
-                        y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-                        out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
+                    x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                    y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                    out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
 
-                    # Compute softmax in float32 outside autocast for numerical stability
-                    out = out[:, : self.num_classes].to(torch.float32)
+                    out = out[:, : self.num_classes]
                     probs = F.softmax(out, dim=1).cpu().numpy()
                     all_probs.append(probs)
 
