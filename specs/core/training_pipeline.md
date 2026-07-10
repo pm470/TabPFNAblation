@@ -3,7 +3,7 @@ id: CORE-002
 title: "Training Pipeline"
 status: implemented
 module: train.py
-last_synced: 2026-07-10
+last_synced: 2026-07-11
 ---
 
 # Training Pipeline
@@ -29,8 +29,10 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-11: `wall_time` tracks cumulative training time only (excludes evaluation time).
 - [x] AC-12: Checkpoints are saved every `checkpoint_every` steps (at 1-indexed step) when both `checkpoint_dir` and `checkpoint_every` are truthy.
 - [x] AC-13: Checkpoint filenames follow the pattern `step_{step:05d}.pt` (e.g., `step_00250.pt`).
-- [x] AC-14: A `final.pt` checkpoint is always saved when `checkpoint_dir` is provided, regardless of `checkpoint_every`.
-- [x] AC-15: Checkpoints are saved via `torch.save(model.state_dict(), path)`.
+- [x] AC-14: A `final.pt` checkpoint is always saved when `checkpoint_dir` is provided, regardless of `checkpoint_every`. It follows the eval→save→train pattern from AC-15.
+- [x] AC-15: Before saving any checkpoint, `optimizer.eval()` must be called to swap in the averaged weights. After saving, `optimizer.train()` must be called to resume training. Checkpoints are saved via `torch.save(model.state_dict(), path)` and the saved `state_dict` must contain the eval-mode (averaged) weights.
+- [x] AC-15.1: A helper function `_save_checkpoint(model, optimizer, checkpoint_dir, filename)` encapsulates the eval→save→train pattern to prevent future omissions.
+- [x] AC-15.2: When `eval_func` is provided, the total cumulative time spent on inline evaluation is tracked and printed once at the end of training (e.g., `[NanoTabPFN] Total inline eval time: 123.4s`).
 - [x] AC-16: `checkpoint_dir` is created with `os.makedirs(exist_ok=True)` if it doesn't exist.
 - [x] AC-17: `KeyboardInterrupt` is caught and training terminates gracefully (final checkpoint still saved).
 - [x] AC-18: Returns a tuple of `(model, eval_history)`.

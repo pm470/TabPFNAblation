@@ -112,6 +112,24 @@ def eval(classifier, datasets=None):
     return scores
 
 
+def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
+    """Save a checkpoint with eval-mode (averaged) weights.
+
+    Switches the optimizer to eval mode (swapping in averaged weights),
+    saves the model state_dict, then switches back to train mode.
+
+    Args:
+        model: The model whose state_dict to save.
+        optimizer: The AdamWScheduleFree optimizer.
+        checkpoint_dir: Directory to save the checkpoint file.
+        filename: Name of the checkpoint file (e.g., 'step_01000.pt' or 'final.pt').
+    """
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    optimizer.eval()
+    torch.save(model.state_dict(), os.path.join(checkpoint_dir, filename))
+    optimizer.train()
+
+
 def train(
     model: NanoTabPFNModel,
     prior: DataLoader,
@@ -155,6 +173,7 @@ def train(
 
     train_time = 0
     eval_history = []
+    total_eval_time = 0.0
     last_checkpoint_time = time.time()
     param_count = sum(p.numel() for p in model.parameters())
     try:
@@ -196,6 +215,7 @@ def train(
 
             # evaluate
             if step % steps_per_eval == steps_per_eval - 1 and eval_func is not None:
+                eval_start_time = time.time()
                 model.eval()
                 optimizer.eval()
 
@@ -214,6 +234,7 @@ def train(
 
                 model.train()
                 optimizer.train()
+                total_eval_time += time.time() - eval_start_time
             elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
                 entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, "param_count": param_count}
                 eval_history.append(entry)
@@ -230,22 +251,21 @@ def train(
             step_to_save = checkpoint_every is not None and (step + 1) % checkpoint_every == 0
 
             if checkpoint_dir and (time_to_save or step_to_save):
-                os.makedirs(checkpoint_dir, exist_ok=True)
-                checkpoint_path = os.path.join(checkpoint_dir, f"step_{step + 1:05d}.pt")
-                torch.save(model.state_dict(), checkpoint_path)
+                _save_checkpoint(model, optimizer, checkpoint_dir, f"step_{step + 1:05d}.pt")
 
     except KeyboardInterrupt:
         pass
 
     # save final checkpoint
     if checkpoint_dir:
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        final_path = os.path.join(checkpoint_dir, "final.pt")
-        torch.save(model.state_dict(), final_path)
+        _save_checkpoint(model, optimizer, checkpoint_dir, "final.pt")
 
     if device.type == "cuda":
         peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
         print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+
+    if total_eval_time > 0:
+        print(f"[NanoTabPFN] Total inline eval time: {total_eval_time:.1f}s")
 
     return model, eval_history
 
