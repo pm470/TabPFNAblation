@@ -1,9 +1,9 @@
 ---
 id: CORE-002
 title: "Training Pipeline"
-status: edited
+status: implemented
 module: train.py
-last_synced: 2026-07-01
+last_synced: 2026-07-10
 ---
 
 # Training Pipeline
@@ -23,8 +23,8 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-5: Evaluation runs every `steps_per_eval` steps (at step indices `steps_per_eval - 1`, `2*steps_per_eval - 1`, etc.).
 - [x] AC-6: During evaluation, model and optimizer are switched to `.eval()` mode, then back to `.train()` mode after.
 - [x] AC-7: Evaluation creates a `NanoTabPFNClassifier` and passes it to the `eval_func` callback.
-- [x] AC-8: Each eval history entry contains keys `step`, `wall_time`, and `loss`; when `eval_func` is provided, it also includes the scores dict keys.
-- [x] AC-9: When `eval_func` is None, eval history entries only contain `step`, `wall_time`, and `loss`.
+- [x] AC-8: Each eval history entry contains keys `step`, `wall_time`, `loss`, and `param_count`; when `eval_func` is provided, it also includes the scores dict keys.
+- [x] AC-9: When `eval_func` is None, eval history entries only contain `step`, `wall_time`, `loss`, and `param_count`.
 - [x] AC-10: `step` in eval entries is 1-indexed (i.e., `step + 1`).
 - [x] AC-11: `wall_time` tracks cumulative training time only (excludes evaluation time).
 - [x] AC-12: Checkpoints are saved every `checkpoint_every` steps (at 1-indexed step) when both `checkpoint_dir` and `checkpoint_every` are truthy.

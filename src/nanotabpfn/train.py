@@ -141,7 +141,8 @@ def train(
 
     Returns:
         (model) our trained numpy model
-        (list) a list containing our eval history, each entry is a dict with step, wall_time, loss, and scores
+        (list) a list containing our eval history, each entry is a dict with
+               step, wall_time, loss, param_count, and scores
     """
     if not device:
         device = get_default_device()
@@ -155,6 +156,7 @@ def train(
     train_time = 0
     eval_history = []
     last_checkpoint_time = time.time()
+    param_count = sum(p.numel() for p in model.parameters())
     try:
         for i, full_data in enumerate(prior):
             step = start_step + i
@@ -199,7 +201,13 @@ def train(
 
                 classifier = NanoTabPFNClassifier(model, device)
                 scores = eval_func(classifier)
-                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, **scores}
+                entry = {
+                    "step": step + 1,
+                    "wall_time": train_time,
+                    "loss": total_loss,
+                    "param_count": param_count,
+                    **scores,
+                }
                 eval_history.append(entry)
                 score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
@@ -207,7 +215,7 @@ def train(
                 model.train()
                 optimizer.train()
             elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
-                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss}
+                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, "param_count": param_count}
                 eval_history.append(entry)
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
 

@@ -87,7 +87,7 @@ def test_metrics_jsonl_valid():
 
     assert len(entries) > 0, "metrics.jsonl is empty"
 
-    expected_keys = {"step", "wall_time", "loss", "roc_auc", "acc", "balanced_acc"}
+    expected_keys = {"step", "wall_time", "loss", "roc_auc", "acc", "balanced_acc", "param_count"}
     for entry in entries:
         assert expected_keys.issubset(entry.keys()), f"Missing keys in entry: {expected_keys - entry.keys()}"
 

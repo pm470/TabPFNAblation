@@ -38,8 +38,39 @@ def test_train_without_eval_func():
     )
     assert len(eval_history) == 1
     entry = eval_history[0]
-    expected_keys = {"step", "wall_time", "loss"}
+    expected_keys = {"step", "wall_time", "loss", "param_count"}
     assert set(entry.keys()) == expected_keys
+
+
+def test_train_param_count_in_history():
+    """train() correctly includes the correct param_count in eval_history."""
+    model = NanoTabPFNModel(
+        embedding_size=32,
+        num_attention_heads=2,
+        mlp_hidden_size=64,
+        num_layers=1,
+        num_outputs=2,
+    )
+    expected_param_count = sum(p.numel() for p in model.parameters())
+
+    mock_prior = [
+        {
+            "x": torch.randn(2, 20, 5, dtype=torch.float32),
+            "y": torch.randint(0, 2, (2, 20), dtype=torch.float32),
+            "train_test_split_index": 10,
+        }
+    ]
+
+    _, eval_history = train(
+        model,
+        mock_prior,  # type: ignore
+        lr=1e-3,
+        device=torch.device("cpu"),
+        steps_per_eval=1,
+        eval_func=None,
+    )
+    assert len(eval_history) == 1
+    assert eval_history[0]["param_count"] == expected_param_count
 
 
 def test_prior_dump_dataloader_wraparound(tmp_path):
