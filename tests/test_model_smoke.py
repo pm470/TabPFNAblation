@@ -7,7 +7,7 @@ from nanotabpfn.model import NanoTabPFNModel
 
 def make_model():
     return NanoTabPFNModel(
-        embedding_size=96,
+        embedding_size=128,
         num_attention_heads=4,
         mlp_hidden_size=192,
         num_layers=3,
@@ -55,7 +55,7 @@ def test_model_param_count():
     """Parameter count matches expected value for default config."""
     model = make_model()
     param_count = sum(p.numel() for p in model.parameters())
-    assert param_count == 356_066, f"Expected 356,066 parameters, got {param_count:,}"
+    assert param_count == 572_674, f"Expected 572,674 parameters, got {param_count:,}"
 
 
 def test_classifier_predict():

@@ -52,8 +52,8 @@ def get_eval_datasets():
             # Simple conversion for ablation eval
             if isinstance(X, pd.DataFrame):
                 X = X.copy()
-                for col in X.select_dtypes(include=['category', 'object']).columns:
-                    X[col] = X[col].astype('category').cat.codes
+                for col in X.select_dtypes(include=["category", "object"]).columns:
+                    X[col] = X[col].astype("category").cat.codes
                 X = X.fillna(0).values.astype(np.float32)
 
             y = np.array(LabelEncoder().fit_transform(y), dtype=np.int64)
@@ -90,22 +90,18 @@ def eval(classifier, datasets=None):
             print("Warning: NaN predictions detected during eval. Replacing with uniform probabilities.")
             prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
         pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
-        
+
         if prob.shape[1] == 2:
             prob = prob[:, 1]
             ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
         else:
             ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
-            
+
         ds_acc = float(accuracy_score(y_test, pred))
         ds_bal_acc = float(balanced_accuracy_score(y_test, pred))
-        
-        scores["datasets"][name] = {
-            "roc_auc": ds_roc_auc,
-            "acc": ds_acc,
-            "balanced_acc": ds_bal_acc
-        }
-        
+
+        scores["datasets"][name] = {"roc_auc": ds_roc_auc, "acc": ds_acc, "balanced_acc": ds_bal_acc}
+
         scores["roc_auc"] += ds_roc_auc
         scores["acc"] += ds_acc
         scores["balanced_acc"] += ds_bal_acc
@@ -169,7 +165,11 @@ def train(
             data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
-            with torch.autocast(device_type=device.type if device.type != "mps" else "cpu", dtype=torch.bfloat16, enabled=device.type != "cpu"):
+            with torch.autocast(
+                device_type=device.type if device.type != "mps" else "cpu",
+                dtype=torch.bfloat16,
+                enabled=device.type != "cpu",
+            ):
                 output = model(data, train_test_split_index=train_test_split_index)
                 targets = targets[:, train_test_split_index:]
 
@@ -368,7 +368,7 @@ if __name__ == "__main__":
     set_randomness_seed(0)
     device = get_default_device()
     model = NanoTabPFNModel(
-        embedding_size=96,
+        embedding_size=128,
         num_attention_heads=4,
         mlp_hidden_size=192,
         num_layers=3,

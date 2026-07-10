@@ -3,7 +3,7 @@ id: CORE-001
 title: "NanoTabPFN Model Architecture"
 status: implemented
 module: model.py
-last_synced: 2026-07-03
+last_synced: 2026-07-10
 ---
 
 # NanoTabPFN Model Architecture
@@ -14,7 +14,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 
 ## Acceptance Criteria
 
-### NanoTabPFNModel
+## NanoTabPFNModel
 
 - [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, and `activation` (default `"gelu"`) as parameters.
 - [x] AC-2: The model contains a `FeatureEncoder`, a `TargetEncoder`, a `nn.ModuleList` of `TransformerEncoderLayer` blocks (length `num_layers`), and a `Decoder`.
@@ -24,7 +24,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 - [x] AC-6: All transformer blocks are applied sequentially, each receiving the `train_test_split_index`.
 - [x] AC-7: After the transformer stack, only test-row target embeddings are selected: `src_tensor[:, train_test_split_index:, -1, :]`.
 - [x] AC-8: Output shape is `(batch_size, num_test_rows, num_outputs)` where `num_test_rows = num_rows - train_test_split_index`.
-- [x] AC-9: With default config (embedding_size=96, heads=4, mlp_hidden=192, layers=3, outputs=2) the model has exactly 356,066 parameters.
+- [x] AC-9: With default config (embedding_size=128, heads=4, mlp_hidden=192, layers=3, outputs=2) the model has exactly 572,674 parameters.
 - [x] AC-9.1: Gated activations dynamically adjust their inner dimension size to maintain a parameter count as close as possible to the baseline.
 
 ### FeatureEncoder

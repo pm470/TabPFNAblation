@@ -165,7 +165,7 @@ class TransformerEncoderLayer(nn.Module):
         chunk_size = 16000
         out_chunks = []
         for i in range(0, src.size(0), chunk_size):
-            chunk = src[i:i+chunk_size]
+            chunk = src[i : i + chunk_size]
             out_chunk = self.self_attention_between_features(chunk, chunk, chunk, need_weights=False)[0]
             out_chunks.append(out_chunk)
         src = torch.cat(out_chunks, dim=0) + src
@@ -176,11 +176,17 @@ class TransformerEncoderLayer(nn.Module):
         src = src.reshape(batch_size * col_size, rows_size, embedding_size)
         # training data attends to itself
         src_left = self.self_attention_between_datapoints(
-            src[:, :train_test_split_index], src[:, :train_test_split_index], src[:, :train_test_split_index], need_weights=False
+            src[:, :train_test_split_index],
+            src[:, :train_test_split_index],
+            src[:, :train_test_split_index],
+            need_weights=False,
         )[0]
         # test data attends to the training data
         src_right = self.self_attention_between_datapoints(
-            src[:, train_test_split_index:], src[:, :train_test_split_index], src[:, :train_test_split_index], need_weights=False
+            src[:, train_test_split_index:],
+            src[:, :train_test_split_index],
+            src[:, :train_test_split_index],
+            need_weights=False,
         )[0]
         src = torch.cat([src_left, src_right], dim=1) + src
         src = src.reshape(batch_size, col_size, rows_size, embedding_size)
