@@ -139,7 +139,7 @@ _PRINTED_DATASETS: set[str] = set()
 
 
 def run_tabarena_eval(
-    model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "classification", n_ensemble: int = 8
+    model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "nanotabpfn", n_ensemble: int = 8
 ):
     """Run TabArena evaluation using the provided trained model."""
     global _CURRENT_PYTORCH_MODEL
@@ -160,11 +160,10 @@ def run_tabarena_eval(
         model_verbosity=0,
     ).build_experiments()
 
+    tabpfn_pred = TabArenaContext.SUBSET_PREDICATES["tabpfn"].predicate
     TabArenaContext.SUBSET_PREDICATES["nanotabpfn"] = SubsetPredicate(
-        lambda df: (
-            (df["max_train_rows"] <= 3000) & (df["n_features"] <= 45) & (df["n_classes"] > 0) & (df["n_classes"] <= 10)
-        ),
-        ("max_train_rows", "n_features", "n_classes"),
+        lambda df: tabpfn_pred(df) & (df["n_classes"] > 0),
+        ("n_classes",),
     )
 
     context = TabArenaContext()
