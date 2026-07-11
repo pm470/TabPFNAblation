@@ -333,15 +333,13 @@ class NanoTabPFNClassifier:
             if len(self.model.transformer_blocks) > 0:
                 num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads  # pyright: ignore[reportAttributeAccessIssue]
 
-            # Target peak memory of 30.0 GiB for the attention weights tensor.
-            # The actual peak is ~2x this (scores + softmax output coexist briefly),
-            # so this targets ~60 GiB peak — perfect for 80+ GB GPUs like the A100.
-            # Memory per attention = col_size * num_heads * (seq_len ** 2) * 4 bytes
-            max_attn_bytes = 30.0 * (1024**3)
+            # Target peak memory (massively increased for Memory Efficient Attention)
+            # which does not materialize the N^2 matrix.
+            max_attn_bytes = 1000.0 * (1024**3)
             max_seq_len = int(np.sqrt(max_attn_bytes / (col_size * num_heads * 4)))
 
-            # Clip max_seq_len to a reasonable range [1000, 10000]
-            max_seq_len = max(1000, min(10000, max_seq_len))
+            # Clip max_seq_len to a much higher range for full dataset eval
+            max_seq_len = max(1000, min(20000, max_seq_len))
 
             max_train_samples = max_seq_len
             max_total_samples = int(max_seq_len * 1.25)
