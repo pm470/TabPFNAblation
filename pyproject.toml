@@ -49,6 +49,7 @@ convention = "google"
 prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
+    "sys_platform == 'darwin'",
 ]
 
 [tool.pytest.ini_options]

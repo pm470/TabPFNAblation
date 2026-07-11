@@ -7,6 +7,13 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.nn import LayerNorm, MultiheadAttention
 
+try:
+    if torch.backends.mps.is_available():
+        from mps_flash_attn import replace_sdpa
+        replace_sdpa()
+except ImportError:
+    pass
+
 
 class NanoTabPFNModel(nn.Module):
     """Core TabPFN Model."""
@@ -333,13 +340,14 @@ class NanoTabPFNClassifier:
             if len(self.model.transformer_blocks) > 0:
                 num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads  # pyright: ignore[reportAttributeAccessIssue]
 
-            # Target peak memory (massively increased for Memory Efficient Attention)
-            # which does not materialize the N^2 matrix.
+            # Target peak memory (massively increased for Memory Efficient Attention
+            # or manual chunking) which does not materialize the full N^2 matrix at once.
             max_attn_bytes = 1000.0 * (1024**3)
+
             max_seq_len = int(np.sqrt(max_attn_bytes / (col_size * num_heads * 4)))
 
             # Clip max_seq_len to a much higher range for full dataset eval
-            max_seq_len = max(1000, min(20000, max_seq_len))
+            max_seq_len = max(1000, min(50000, max_seq_len))
 
             max_train_samples = max_seq_len
             max_total_samples = int(max_seq_len * 1.25)
