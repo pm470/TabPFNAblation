@@ -26,7 +26,7 @@ def parse_args(argv=None):
     parser.add_argument("--checkpoint_every", type=int, default=250, help="Save checkpoint every N steps")
     parser.add_argument("--checkpoint_every_minutes", type=float, default=10.0, help="Save checkpoint every N minutes")
     parser.add_argument("--output_dir", type=str, default="results", help="Base output directory")
-    parser.add_argument("--embedding_size", type=int, default=96, help="Embedding size")
+    parser.add_argument("--embedding_size", type=int, default=128, help="Embedding size")
     parser.add_argument("--num_attention_heads", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")

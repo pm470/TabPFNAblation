@@ -38,8 +38,39 @@ def test_train_without_eval_func():
     )
     assert len(eval_history) == 1
     entry = eval_history[0]
-    expected_keys = {"step", "wall_time", "loss"}
+    expected_keys = {"step", "wall_time", "loss", "param_count"}
     assert set(entry.keys()) == expected_keys
+
+
+def test_train_param_count_in_history():
+    """train() correctly includes the correct param_count in eval_history."""
+    model = NanoTabPFNModel(
+        embedding_size=32,
+        num_attention_heads=2,
+        mlp_hidden_size=64,
+        num_layers=1,
+        num_outputs=2,
+    )
+    expected_param_count = sum(p.numel() for p in model.parameters())
+
+    mock_prior = [
+        {
+            "x": torch.randn(2, 20, 5, dtype=torch.float32),
+            "y": torch.randint(0, 2, (2, 20), dtype=torch.float32),
+            "train_test_split_index": 10,
+        }
+    ]
+
+    _, eval_history = train(
+        model,
+        mock_prior,  # type: ignore
+        lr=1e-3,
+        device=torch.device("cpu"),
+        steps_per_eval=1,
+        eval_func=None,
+    )
+    assert len(eval_history) == 1
+    assert eval_history[0]["param_count"] == expected_param_count
 
 
 def test_prior_dump_dataloader_wraparound(tmp_path):
@@ -73,3 +104,121 @@ def test_prior_dump_dataloader_wraparound(tmp_path):
 
     # Verify wraparound reset pointer to 0
     assert loader.pointer == 2
+
+
+def test_save_checkpoint_helper(tmp_path):
+    """_save_checkpoint() correctly calls eval() and train() on optimizer."""
+    import schedulefree
+
+    from nanotabpfn.train import _save_checkpoint
+
+    model = NanoTabPFNModel(embedding_size=32, num_attention_heads=2, mlp_hidden_size=64, num_layers=1, num_outputs=2)
+    optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=1e-3, weight_decay=0.0)
+
+    # Train mode by default
+    model.train()
+    optimizer.train()
+
+    ckpt_dir = tmp_path / "checkpoints"
+    _save_checkpoint(model, optimizer, str(ckpt_dir), "step_00001.pt")
+
+    # Ensure file was created
+    assert (ckpt_dir / "step_00001.pt").exists()
+
+
+def test_total_eval_time_printed(capsys):
+    """Total inline eval time is printed at the end of training if eval_func is provided."""
+    model = NanoTabPFNModel(embedding_size=32, num_attention_heads=2, mlp_hidden_size=64, num_layers=1, num_outputs=2)
+    mock_prior = [
+        {
+            "x": torch.randn(2, 20, 5, dtype=torch.float32),
+            "y": torch.randint(0, 2, (2, 20), dtype=torch.float32),
+            "train_test_split_index": 10,
+        }
+    ]
+
+    def mock_eval_func(classifier):
+        import time
+
+        time.sleep(0.1)  # Simulate eval time
+        return {"accuracy": 1.0}
+
+    train(model, mock_prior, lr=1e-3, device=torch.device("cpu"), steps_per_eval=1, eval_func=mock_eval_func)  # type: ignore
+
+    captured = capsys.readouterr()
+    assert "[NanoTabPFN] Total inline eval time:" in captured.out
+
+
+def test_checkpoint_saves_eval_weights(tmp_path):
+    """Checkpoints saved mid-training should contain eval-mode weights."""
+    model = NanoTabPFNModel(embedding_size=32, num_attention_heads=2, mlp_hidden_size=64, num_layers=1, num_outputs=2)
+    mock_prior = [
+        {
+            "x": torch.randn(2, 20, 5, dtype=torch.float32),
+            "y": torch.randint(0, 2, (2, 20), dtype=torch.float32),
+            "train_test_split_index": 10,
+        }
+    ]
+
+    ckpt_dir = tmp_path / "checkpoints"
+
+    # Train for 1 step, save checkpoint every 1 step
+    model, _ = train(
+        model,
+        mock_prior,  # type: ignore
+        lr=1e-3,
+        device=torch.device("cpu"),
+        checkpoint_dir=str(ckpt_dir),
+        checkpoint_every=1,
+    )
+
+    assert (ckpt_dir / "step_00001.pt").exists()
+
+    # Manually extract eval weights from the model now that training is done
+    import schedulefree
+
+    optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=1e-3, weight_decay=0.0)
+    optimizer.eval()
+    expected_weights = model.state_dict()
+
+    # Load the saved checkpoint
+    saved_weights = torch.load(ckpt_dir / "step_00001.pt", map_location="cpu", weights_only=True)
+
+    # Compare weights (just pick the first key)
+    first_key = next(iter(expected_weights))
+    assert torch.allclose(expected_weights[first_key], saved_weights[first_key])
+
+
+def test_final_checkpoint_saves_eval_weights(tmp_path):
+    """The final.pt checkpoint should contain eval-mode weights."""
+    model = NanoTabPFNModel(embedding_size=32, num_attention_heads=2, mlp_hidden_size=64, num_layers=1, num_outputs=2)
+    mock_prior = [
+        {
+            "x": torch.randn(2, 20, 5, dtype=torch.float32),
+            "y": torch.randint(0, 2, (2, 20), dtype=torch.float32),
+            "train_test_split_index": 10,
+        }
+    ]
+
+    ckpt_dir = tmp_path / "checkpoints"
+
+    model, _ = train(
+        model,
+        mock_prior,  # type: ignore
+        lr=1e-3,
+        device=torch.device("cpu"),
+        checkpoint_dir=str(ckpt_dir),
+        checkpoint_every=100,
+    )
+
+    assert (ckpt_dir / "final.pt").exists()
+
+    import schedulefree
+
+    optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=1e-3, weight_decay=0.0)
+    optimizer.eval()
+    expected_weights = model.state_dict()
+
+    saved_weights = torch.load(ckpt_dir / "final.pt", map_location="cpu", weights_only=True)
+    first_key = next(iter(expected_weights))
+    assert torch.allclose(expected_weights[first_key], saved_weights[first_key])

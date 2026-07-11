@@ -3,7 +3,7 @@ id: CORE-003
 title: "Seed Determinism"
 status: implemented
 module: train.py
-last_synced: 2026-06-25
+last_synced: 2026-07-10
 ---
 
 # Seed Determinism

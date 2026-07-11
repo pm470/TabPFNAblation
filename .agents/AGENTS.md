@@ -75,7 +75,7 @@ Modern activation functions might yield statistically significant improvements c
 
 - **Gated activations (SwiGLU, GeGLU, ReGLU)** will use identical parameter counts to non-gated variants (LLaMA-style `E → 2*(2H/3)` trick) for fair comparison.
 - **Seed determinism** is critical: `torch.cuda.manual_seed_all`, `cudnn.deterministic=True`, `cudnn.benchmark=False`. Verified by pytest.
-- Default training: 5000 steps, batch_size=32, lr=4e-3, eval every 250 steps, checkpoint every 1000 steps. Mixed-precision (bfloat16) enabled.
+- Default training: 5000 steps, batch_size=32, lr=4e-3, eval every 250 steps, checkpoint every 1000 steps. Using float32.
 - Model: 356K params (embedding=96, heads=3, mlp_hidden=192, layers=3, outputs=2). Heads changed to 3 to unlock FlashAttention on A100. Feature attention is chunked to avoid CUDA grid limits.
 
 ## Research Plan
