@@ -50,7 +50,7 @@ analyze(2000, 40, 10, "Fast (2000 rows, 40 feats, 10 classes)")
 analyze(5000, 100, 10, "Medium (5000 rows, 100 feats, 10 classes)")
 analyze(10000, 100, 10, "Large (10000 rows, 100 feats, 10 classes)")
 
-n_all_clf = df[(df["num_classes"] > 0)]["dataset_name"].nunique()
+n_all_clf = df[(df["num_classes"] > 0)]["dataset_name"].nunique()  # type: ignore
 max_all_rows = int(df[df["num_classes"] > 0]["num_instances_train"].max())
 max_all_feats = int(df[df["num_classes"] > 0]["num_features"].max())
 max_all_cls = int(df[df["num_classes"] > 0]["num_classes"].max())

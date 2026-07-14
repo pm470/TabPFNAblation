@@ -9,7 +9,8 @@ from torch.nn import LayerNorm, MultiheadAttention
 
 try:
     if torch.backends.mps.is_available():
-        from mps_flash_attn import replace_sdpa
+        from mps_flash_attn import replace_sdpa  # type: ignore
+
         replace_sdpa()
 except ImportError:
     pass

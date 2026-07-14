@@ -162,7 +162,7 @@ def run_tabarena_eval(
 
     tabpfn_obj = TabArenaContext.SUBSET_PREDICATES["tabpfn"]
     tabpfn_pred = tabpfn_obj.predicate
-    req_cols = tuple(set(tabpfn_obj.required_columns + ("n_classes",)))
+    req_cols = tuple(set((*tabpfn_obj.required_columns, "n_classes")))
 
     TabArenaContext.SUBSET_PREDICATES["nanotabpfn"] = SubsetPredicate(
         lambda df: tabpfn_pred(df) & (df["n_classes"] > 0),
