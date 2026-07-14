@@ -128,6 +128,8 @@ def run_experiment(args):
             num_steps=remaining_steps,
             batch_size=args.batch_size,
             device=device,
+            seed=args.seed,
+            skip_steps=start_step,
         )
     else:
         from torch.utils.data import DataLoader
