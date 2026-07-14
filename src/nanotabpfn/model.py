@@ -329,26 +329,17 @@ class NanoTabPFNClassifier:
         Cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities.
         """
-        # Determine limits based on feature count to avoid quadratic memory OOM in attention
+        # Determine sequence length limits for subsampling / chunking.
+        # With Flash / Memory-Efficient Attention the full N² matrix is never
+        # materialised, so there is no quadratic memory constraint.  We use a
+        # simple explicit limit instead.  10 000 comfortably covers the largest
+        # nanotabpfn dataset (8 456 train rows).  Datasets exceeding this have
+        # their training context subsampled and test data chunked (lossless).
         if self.max_train_samples is not None and self.max_total_samples is not None:
             max_train_samples = self.max_train_samples
             max_total_samples = self.max_total_samples
         else:
-            num_features = self.X_train.shape[1]
-            col_size = num_features + 1
-            num_heads = 4
-            if len(self.model.transformer_blocks) > 0:
-                num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads  # pyright: ignore[reportAttributeAccessIssue]
-
-            # Target peak memory (massively increased for Memory Efficient Attention
-            # or manual chunking) which does not materialize the full N^2 matrix at once.
-            max_attn_bytes = 1000.0 * (1024**3)
-
-            max_seq_len = int(np.sqrt(max_attn_bytes / (col_size * num_heads * 4)))
-
-            # Clip max_seq_len to a much higher range for full dataset eval
-            max_seq_len = max(1000, min(50000, max_seq_len))
-
+            max_seq_len = 10_000
             max_train_samples = max_seq_len
             max_total_samples = int(max_seq_len * 1.25)
 
