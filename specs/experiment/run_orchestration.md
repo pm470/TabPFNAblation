@@ -3,7 +3,7 @@ id: EXP-002
 title: "Run Orchestration"
 status: implemented
 module: run_all.sh
-last_synced: 2026-06-25
+last_synced: 2026-07-15
 ---
 
 # Run Orchestration
@@ -26,7 +26,7 @@ As a researcher, I want a single shell script that runs all activation × seed c
 
 ### Experiment Configuration
 
-- [x] AC-5: `ACTIVATIONS` array currently contains only `"gelu"`.
+- [x] AC-5: `ACTIVATIONS` array contains `"bilinear" "swiglu" "relu" "gelu" "swish" "prelu" "leaky_relu"`.
 - [x] AC-6: `SEEDS` array contains `0 1 2`.
 - [x] AC-7: `NUM_STEPS` is set to `2500`.
 - [x] AC-8: `EVAL_EVERY` is set to `25`.
@@ -46,6 +46,6 @@ As a researcher, I want a single shell script that runs all activation × seed c
 
 ## Notes
 
-- The script is designed for V1 validation: only GELU with 3 seeds. The `ACTIVATIONS` array will be expanded in later phases to include SwiGLU, GeGLU, Mish, etc.
+- The script is configured to test the core non-gated activations (GELU, ReLU, Swish, PReLU, Leaky ReLU) and gated variants (SwiGLU, Bilinear).
 - Sequential execution ensures reproducibility and simplifies debugging at the cost of wall-clock time.
 - The `--benchmark` flag is not passed, so it defaults to `breast_cancer` (the fast local evaluation).
