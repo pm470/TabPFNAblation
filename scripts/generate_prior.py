@@ -21,10 +21,10 @@ def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Generate synthetic TabPFN prior datasets to HDF5.")
     parser.add_argument("--output_file", type=str, default="prior_dump.h5", help="Path to output HDF5 file")
-    parser.add_argument("--num_datasets", type=int, default=100000, help="Total number of datasets to generate")
+    parser.add_argument("--num_datasets", type=int, default=50000, help="Total number of datasets to generate")
     parser.add_argument("--batch_size", type=int, default=16, help="Generation batch size")
-    parser.add_argument("--max_seq_len", type=int, default=3000, help="Maximum number of samples per dataset")
-    parser.add_argument("--max_features", type=int, default=45, help="Maximum number of features per dataset")
+    parser.add_argument("--max_seq_len", type=int, default=10000, help="Maximum number of samples per dataset")
+    parser.add_argument("--max_features", type=int, default=120, help="Maximum number of features per dataset")
     parser.add_argument("--max_classes", type=int, default=10, help="Maximum number of classes")
     parser.add_argument("--num_workers", type=int, default=0, help="Number of workers for DataLoader")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
