@@ -3,6 +3,7 @@
 import os
 import random
 import time
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -14,6 +15,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.utils import save_memory_stat
 
 
 def set_randomness_seed(seed):
@@ -150,6 +152,8 @@ def train(
     if not device:
         device = get_default_device()
     model.to(device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
 
@@ -238,6 +242,9 @@ def train(
     if device.type == "cuda":
         peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
         print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+        if checkpoint_dir:
+            # checkpoint_dir is run_dir/checkpoints, so memory_stats.json lives alongside config.json
+            save_memory_stat(Path(checkpoint_dir).parent, "peak_vram_pretrain_gb", peak_mem_gb)
 
     return model, eval_history
 

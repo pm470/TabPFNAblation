@@ -20,6 +20,7 @@ from nanotabpfn.train import (
     set_randomness_seed,
     train,
 )
+from nanotabpfn.utils import save_memory_stat
 
 
 def parse_args(argv=None):
@@ -168,6 +169,10 @@ def run_experiment(args):
     # Final evaluation
     model.eval()
 
+    # Reset peak-memory tracking so eval VRAM is measured separately from pretraining VRAM.
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+
     if args.benchmark == "tabarena":
         from nanotabpfn.tabarena_eval import run_tabarena_eval
 
@@ -183,6 +188,7 @@ def run_experiment(args):
         if device.type == "cuda":
             peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
             print(f"[NanoTabPFN] Peak GPU memory allocated for benchmark {args.benchmark}: {peak_mem_gb:.2f} GB")
+            save_memory_stat(run_dir, "peak_vram_eval_gb", peak_mem_gb)
 
         # Save final local scores to a separate file so we don't mix them with step metrics
         final_scores_path = run_dir / "final_scores.json"
