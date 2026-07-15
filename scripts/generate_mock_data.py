@@ -27,11 +27,11 @@ from numpy.random import Generator
 ACTIVATION_PROFILES: dict[str, dict[str, float]] = {
     "gelu": {"final_auc": 0.72, "convergence_rate": 800, "noise_std": 0.015},
     "relu": {"final_auc": 0.69, "convergence_rate": 900, "noise_std": 0.020},
-    "silu": {"final_auc": 0.73, "convergence_rate": 750, "noise_std": 0.014},
-    "mish": {"final_auc": 0.74, "convergence_rate": 700, "noise_std": 0.013},
+    "swish": {"final_auc": 0.73, "convergence_rate": 750, "noise_std": 0.014},
+    "leaky_relu": {"final_auc": 0.70, "convergence_rate": 880, "noise_std": 0.018},
+    "prelu": {"final_auc": 0.71, "convergence_rate": 860, "noise_std": 0.017},
     "swiglu": {"final_auc": 0.76, "convergence_rate": 650, "noise_std": 0.012},
-    "geglu": {"final_auc": 0.75, "convergence_rate": 680, "noise_std": 0.013},
-    "reglu": {"final_auc": 0.71, "convergence_rate": 850, "noise_std": 0.016},
+    "bilinear": {"final_auc": 0.74, "convergence_rate": 700, "noise_std": 0.013},
 }
 
 NUM_SEEDS: int = 10
@@ -193,14 +193,14 @@ def generate_architecture_ablation(output_dir: Path, rng: Generator) -> None:
         output_dir: Root output directory (e.g. ``results_mock/``).
         rng: NumPy random generator instance.
     """
-    activations = ["gelu", "swiglu", "geglu"]
+    activations = ["gelu", "swiglu", "bilinear"]
 
     # --- Depth scaling ---
     layers = [1, 2, 3, 4, 6, 8]
     # Base asymptotes per activation (ordered as *activations*).
-    depth_bases = {"gelu": 0.60, "swiglu": 0.62, "geglu": 0.61}
-    # Per-layer gain (diminishing).  SwiGLU/GeGLU benefit more from depth.
-    depth_gain = {"gelu": 0.025, "swiglu": 0.032, "geglu": 0.030}
+    depth_bases = {"gelu": 0.60, "swiglu": 0.62, "bilinear": 0.61}
+    # Per-layer gain (diminishing).  SwiGLU/bilinear benefit more from depth.
+    depth_gain = {"gelu": 0.025, "swiglu": 0.032, "bilinear": 0.030}
 
     depth_results: dict[str, dict[str, list[float]]] = {}
     for act in activations:
@@ -218,8 +218,8 @@ def generate_architecture_ablation(output_dir: Path, rng: Generator) -> None:
 
     # --- Width scaling ---
     hidden_dims = [64, 128, 192, 256, 384, 512]
-    width_bases = {"gelu": 0.58, "swiglu": 0.60, "geglu": 0.59}
-    width_gain = {"gelu": 0.028, "swiglu": 0.032, "geglu": 0.030}
+    width_bases = {"gelu": 0.58, "swiglu": 0.60, "bilinear": 0.59}
+    width_gain = {"gelu": 0.028, "swiglu": 0.032, "bilinear": 0.030}
 
     width_results: dict[str, dict[str, list[float]]] = {}
     for act in activations:

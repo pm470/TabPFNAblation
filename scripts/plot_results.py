@@ -15,6 +15,7 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -24,6 +25,16 @@ PLOT_DPI = 300
 PLOT_STYLE = "whitegrid"
 WATERMARK_TEXT = "MOCK DATA — NOT FROM REAL EXPERIMENTS"
 BASELINE_ACTIVATION = "gelu"
+
+ACTIVATION_DISPLAY_NAMES = {
+    "gelu": "GELU",
+    "relu": "ReLU",
+    "swish": "Swish",
+    "leaky_relu": "Leaky ReLU",
+    "prelu": "PReLU",
+    "swiglu": "SwiGLU",
+    "bilinear": "Bilinear",
+}
 
 
 def _add_watermark(ax: plt.Axes) -> None:
@@ -144,7 +155,7 @@ def plot_bar_chart_with_error_bars(
     """Bar chart of Normalized ROC-AUC per activation with error bars.
 
     Bars are sorted by descending mean performance. The GELU baseline
-    bar is highlighted with distinct hatching.
+    is plotted as a horizontal reference line with a shaded uncertainty band.
 
     Args:
         all_results: Dict mapping activation name → list of seed runs.
@@ -157,11 +168,22 @@ def plot_bar_chart_with_error_bars(
     names: list[str] = []
     means: list[float] = []
     stds: list[float] = []
+    baseline_mean: float = 0.0
+
     for activation_name, seed_runs in all_results.items():
         final_aucs = [run[-1].get("roc_auc", float("nan")) for run in seed_runs]
-        names.append(activation_name)
-        means.append(float(np.nanmean(final_aucs)))
-        stds.append(float(np.nanstd(final_aucs)))
+
+        act_mean = float(np.nanmean(final_aucs))
+        act_std = float(np.nanstd(final_aucs))
+
+        display_name = ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.upper())
+        if activation_name == BASELINE_ACTIVATION:
+            baseline_mean = act_mean
+            display_name = f"{display_name} (Baseline)"
+
+        names.append(display_name)
+        means.append(act_mean)
+        stds.append(act_std)
 
     # Sort by descending mean
     order = np.argsort(means)[::-1]
@@ -173,28 +195,41 @@ def plot_bar_chart_with_error_bars(
     palette = sns.color_palette("deep", len(names))
     bars = ax.bar(names, means, yerr=stds, capsize=5, color=palette, edgecolor="black", linewidth=0.8)
 
-    # Highlight GELU baseline
+    # Find GELU baseline color to match the line
+    baseline_color = "black"
     for bar, name in zip(bars, names, strict=True):
-        if name == BASELINE_ACTIVATION:
-            bar.set_hatch("//")
-            bar.set_edgecolor("black")
-            bar.set_linewidth(1.2)
+        if "(Baseline)" in name:
+            baseline_color = bar.get_facecolor()
+
+    # Highlight GELU baseline as a horizontal reference (in front of bars)
+    ax.axhline(
+        baseline_mean,
+        color=baseline_color,
+        linestyle="--",
+        linewidth=2,
+        zorder=2,
+        label=f"{ACTIVATION_DISPLAY_NAMES.get(BASELINE_ACTIVATION, BASELINE_ACTIVATION.upper())} (Baseline)",
+    )
+    ax.legend(fontsize=11, loc="upper right")
 
     ax.set_xlabel("Activation Function", fontsize=12)
     ax.set_ylabel("Normalized ROC-AUC", fontsize=12)
     ax.set_title("Normalized ROC-AUC by Activation Function", fontsize=14)
+    ax.set_ylim(bottom=0.5)
     ax.grid(True, alpha=0.3, axis="y")
 
     # Add value labels on bars
     for bar, mean, std in zip(bars, means, stds, strict=True):
         ax.text(
             bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + std + 0.005,
+            mean + std + 0.002,
             f"{mean:.3f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=10,
             fontweight="bold",
+            zorder=4,
+            path_effects=[path_effects.withStroke(linewidth=3, foreground="white")],
         )
 
     if is_mock:
@@ -241,7 +276,11 @@ def plot_learning_curves_best(
         mean_auc = np.nanmean(roc_aucs_arr, axis=0)
         std_auc = np.nanstd(roc_aucs_arr, axis=0)
 
-        label = f"{activation_name.upper()} (n={len(seed_runs)})"
+        label = ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.upper())
+        if activation_name == BASELINE_ACTIVATION:
+            label = f"{label} (Baseline)"
+        label = f"{label} (n={len(seed_runs)})"
+
         linestyle = "--" if activation_name == BASELINE_ACTIVATION else "-"
         ax.plot(steps, mean_auc, label=label, color=palette[idx], linewidth=2, linestyle=linestyle)
         ax.fill_between(steps, mean_auc - std_auc, mean_auc + std_auc, alpha=0.15, color=palette[idx])
@@ -284,7 +323,10 @@ def plot_depth_scaling(
     for idx, (name, values) in enumerate(depth_data["results"].items()):
         mean = np.array(values["mean"])
         std = np.array(values["std"])
-        label = name.upper()
+        label = ACTIVATION_DISPLAY_NAMES.get(name, name.upper())
+        if name == BASELINE_ACTIVATION:
+            label = f"{label} (Baseline)"
+
         linestyle = "--" if name == BASELINE_ACTIVATION else "-"
         marker = markers[idx % len(markers)]
 
@@ -307,7 +349,7 @@ def plot_depth_scaling(
         )
 
     ax.set_xlabel("Number of Transformer Layers", fontsize=12)
-    ax.set_ylabel("TabArena Score", fontsize=12)
+    ax.set_ylabel("Normalized ROC-AUC", fontsize=12)
     ax.set_title("Architecture Scaling: Depth", fontsize=14)
     ax.set_xticks(layers)
     ax.legend(fontsize=11)
@@ -344,7 +386,10 @@ def plot_width_scaling(
     for idx, (name, values) in enumerate(width_data["results"].items()):
         mean = np.array(values["mean"])
         std = np.array(values["std"])
-        label = name.upper()
+        label = ACTIVATION_DISPLAY_NAMES.get(name, name.upper())
+        if name == BASELINE_ACTIVATION:
+            label = f"{label} (Baseline)"
+
         linestyle = "--" if name == BASELINE_ACTIVATION else "-"
 
         ax.plot(hidden_dims, mean, label=label, color=palette[idx], linewidth=2, linestyle=linestyle, marker="o")

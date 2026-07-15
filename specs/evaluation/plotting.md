@@ -37,14 +37,14 @@ As a researcher, I want to visualize training curves and final evaluation metric
 - [ ] AC-32: Generates mock results into `results_mock/` directory with 7 activations × 10 seeds.
 - [ ] AC-33: Each seed directory contains `metrics.jsonl` and `config.json`.
 - [ ] AC-34: Learning curves follow exponential saturation with per-seed offsets and per-step noise.
-- [ ] AC-35: Generates `architecture_ablation.json` with depth and width scaling data for GELU, SwiGLU, GeGLU.
+- [ ] AC-35: Generates `architecture_ablation.json` with depth and width scaling data for GELU, SwiGLU, Bilinear.
 - [ ] AC-36: Uses fixed numpy random seed (42) for reproducibility.
 
 ### plot_bar_chart_with_error_bars()
 
 - [ ] AC-37: Bar chart of Normalized ROC-AUC per activation with mean ± std error bars.
 - [ ] AC-38: Bars sorted by descending mean performance.
-- [ ] AC-39: GELU baseline bar is visually highlighted (distinct color or hatching).
+- [ ] AC-39: GELU baseline is rendered as a standard bar AND a dashed horizontal reference line (in front of the bars) matching the bar's color.
 - [ ] AC-40: Saves to `{output_dir}/bar_chart_roc_auc.{png,svg}` at 300 DPI.
 
 ### plot_learning_curves_best()
@@ -56,7 +56,7 @@ As a researcher, I want to visualize training curves and final evaluation metric
 
 ### plot_depth_scaling()
 
-- [ ] AC-45: Line plot of number of transformer layers (x-axis, integer) vs. TabArena Score (y-axis).
+- [ ] AC-45: Line plot of number of transformer layers (x-axis, integer) vs. Normalized ROC-AUC (y-axis).
 - [ ] AC-46: Shows GELU + top-2 variants with uncertainty bands.
 - [ ] AC-47: Saves to `{output_dir}/depth_scaling.{png,svg}` at 300 DPI.
 
