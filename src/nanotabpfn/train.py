@@ -132,7 +132,7 @@ def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
 
 def train(
     model: NanoTabPFNModel,
-    prior: DataLoader,
+    prior: DataLoader | torch.utils.data.IterableDataset,
     lr: float = 1e-4,
     device: torch.device | None = None,
     steps_per_eval=10,
