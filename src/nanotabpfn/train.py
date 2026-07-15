@@ -3,7 +3,9 @@
 import os
 import random
 import time
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import TypedDict
 
 import h5py
 import numpy as np
@@ -16,6 +18,14 @@ from torch.utils.data import DataLoader
 
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 from nanotabpfn.utils import save_memory_stat
+
+
+class PriorBatch(TypedDict):
+    """A single batch of synthetic prior data."""
+
+    x: torch.Tensor
+    y: torch.Tensor
+    train_test_split_index: int
 
 
 def set_randomness_seed(seed):
@@ -134,7 +144,7 @@ def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
 
 def train(
     model: NanoTabPFNModel,
-    prior: DataLoader,
+    prior: Iterable[PriorBatch],
     lr: float = 1e-4,
     device: torch.device | None = None,
     steps_per_eval=10,
@@ -292,7 +302,7 @@ class PriorDumpDataLoader(DataLoader):
         with h5py.File(self.filename, "r") as f:
             self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
 
-    def __iter__(self):  # pyright: ignore
+    def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""
         with h5py.File(self.filename, "r") as f:
             for _ in range(self.num_steps):
@@ -310,7 +320,7 @@ class PriorDumpDataLoader(DataLoader):
                     print("Finished iteration over all stored datasets!")
                     self.pointer = 0
 
-                yield dict(
+                yield PriorBatch(
                     x=x.to(self.device),
                     y=y.to(self.device),
                     train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
@@ -351,7 +361,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         self.max_classes = max_classes
         self.device = device if device is not None else get_default_device()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""
         import math
 
@@ -383,7 +393,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
             # 50% to 90% of samples used for training
             train_test_split_index = int(n_samples * np.random.uniform(0.5, 0.9))
 
-            yield dict(
+            yield PriorBatch(
                 x=x_batch.to(self.device),
                 y=y_batch.to(self.device),
                 train_test_split_index=train_test_split_index,
