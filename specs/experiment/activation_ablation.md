@@ -3,7 +3,7 @@ id: EXP-001
 title: "Modular Training & Benchmarking Pipeline"
 status: implemented
 module: "train_ablation.py, benchmark_model.py, sbatch_train.sh, sbatch_benchmark.sh"
-last_synced: 2026-06-28
+last_synced: 2026-07-10
 ---
 
 # Modular Training & Benchmarking Pipeline
@@ -26,7 +26,7 @@ As a researcher, I want a modular, cluster-ready pipeline that separates data lo
 - [x] AC-8: `--checkpoint_every` (int, default `250`) — step-based checkpoint interval.
 - [x] AC-9: `--checkpoint_every_minutes` (float, default `10.0`) — time-based checkpoint interval.
 - [x] AC-10: `--output_dir` (str, default `"results"`) — base output directory.
-- [x] AC-11: Model architecture args: `--embedding_size` (96), `--num_attention_heads` (4), `--mlp_hidden_size` (192), `--num_layers` (3), `--num_outputs` (10).
+- [x] AC-11: Model architecture args: `--embedding_size` (128), `--num_attention_heads` (4), `--mlp_hidden_size` (192), `--num_layers` (3), `--num_outputs` (10).
 
 ### Output Directory Structure
 

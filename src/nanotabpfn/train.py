@@ -54,8 +54,8 @@ def get_eval_datasets():
             # Simple conversion for ablation eval
             if isinstance(X, pd.DataFrame):
                 X = X.copy()
-                for col in X.select_dtypes(include=['category', 'object']).columns:
-                    X[col] = X[col].astype('category').cat.codes
+                for col in X.select_dtypes(include=["category", "object"]).columns:
+                    X[col] = X[col].astype("category").cat.codes
                 X = X.fillna(0).values.astype(np.float32)
 
             y = np.array(LabelEncoder().fit_transform(y), dtype=np.int64)
@@ -92,22 +92,18 @@ def eval(classifier, datasets=None):
             print("Warning: NaN predictions detected during eval. Replacing with uniform probabilities.")
             prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
         pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
-        
+
         if prob.shape[1] == 2:
             prob = prob[:, 1]
             ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
         else:
             ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
-            
+
         ds_acc = float(accuracy_score(y_test, pred))
         ds_bal_acc = float(balanced_accuracy_score(y_test, pred))
-        
-        scores["datasets"][name] = {
-            "roc_auc": ds_roc_auc,
-            "acc": ds_acc,
-            "balanced_acc": ds_bal_acc
-        }
-        
+
+        scores["datasets"][name] = {"roc_auc": ds_roc_auc, "acc": ds_acc, "balanced_acc": ds_bal_acc}
+
         scores["roc_auc"] += ds_roc_auc
         scores["acc"] += ds_acc
         scores["balanced_acc"] += ds_bal_acc
@@ -116,6 +112,24 @@ def eval(classifier, datasets=None):
     scores["acc"] /= len(datasets)
     scores["balanced_acc"] /= len(datasets)
     return scores
+
+
+def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
+    """Save a checkpoint with eval-mode (averaged) weights.
+
+    Switches the optimizer to eval mode (swapping in averaged weights),
+    saves the model state_dict, then switches back to train mode.
+
+    Args:
+        model: The model whose state_dict to save.
+        optimizer: The AdamWScheduleFree optimizer.
+        checkpoint_dir: Directory to save the checkpoint file.
+        filename: Name of the checkpoint file (e.g., 'step_01000.pt' or 'final.pt').
+    """
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    optimizer.eval()
+    torch.save(model.state_dict(), os.path.join(checkpoint_dir, filename))
+    optimizer.train()
 
 
 def train(
@@ -147,7 +161,8 @@ def train(
 
     Returns:
         (model) our trained numpy model
-        (list) a list containing our eval history, each entry is a dict with step, wall_time, loss, and scores
+        (list) a list containing our eval history, each entry is a dict with
+               step, wall_time, loss, param_count, and scores
     """
     if not device:
         device = get_default_device()
@@ -162,7 +177,9 @@ def train(
 
     train_time = 0
     eval_history = []
+    total_eval_time = 0.0
     last_checkpoint_time = time.time()
+    param_count = sum(p.numel() for p in model.parameters())
     try:
         for i, full_data in enumerate(prior):
             step = start_step + i
@@ -173,14 +190,13 @@ def train(
             data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
-            with torch.autocast(device_type=device.type if device.type != "mps" else "cpu", dtype=torch.bfloat16, enabled=device.type != "cpu"):
-                output = model(data, train_test_split_index=train_test_split_index)
-                targets = targets[:, train_test_split_index:]
+            output = model(data, train_test_split_index=train_test_split_index)
+            targets = targets[:, train_test_split_index:]
 
-                targets = targets.reshape((-1,)).to(torch.long)
-                output = output.view(-1, output.shape[-1])
+            targets = targets.reshape((-1,)).to(torch.long)
+            output = output.view(-1, output.shape[-1])
 
-                loss = criterion(output, targets).mean()
+            loss = criterion(output, targets).mean()
 
             if torch.isnan(loss):
                 print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
@@ -198,20 +214,28 @@ def train(
 
             # evaluate
             if step % steps_per_eval == steps_per_eval - 1 and eval_func is not None:
+                eval_start_time = time.time()
                 model.eval()
                 optimizer.eval()
 
                 classifier = NanoTabPFNClassifier(model, device)
                 scores = eval_func(classifier)
-                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, **scores}
+                entry = {
+                    "step": step + 1,
+                    "wall_time": train_time,
+                    "loss": total_loss,
+                    "param_count": param_count,
+                    **scores,
+                }
                 eval_history.append(entry)
                 score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
 
                 model.train()
                 optimizer.train()
+                total_eval_time += time.time() - eval_start_time
             elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
-                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss}
+                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, "param_count": param_count}
                 eval_history.append(entry)
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
 
@@ -226,18 +250,14 @@ def train(
             step_to_save = checkpoint_every is not None and (step + 1) % checkpoint_every == 0
 
             if checkpoint_dir and (time_to_save or step_to_save):
-                os.makedirs(checkpoint_dir, exist_ok=True)
-                checkpoint_path = os.path.join(checkpoint_dir, f"step_{step + 1:05d}.pt")
-                torch.save(model.state_dict(), checkpoint_path)
+                _save_checkpoint(model, optimizer, checkpoint_dir, f"step_{step + 1:05d}.pt")
 
     except KeyboardInterrupt:
         pass
 
     # save final checkpoint
     if checkpoint_dir:
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        final_path = os.path.join(checkpoint_dir, "final.pt")
-        torch.save(model.state_dict(), final_path)
+        _save_checkpoint(model, optimizer, checkpoint_dir, "final.pt")
 
     if device.type == "cuda":
         peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
@@ -245,6 +265,9 @@ def train(
         if checkpoint_dir:
             # checkpoint_dir is run_dir/checkpoints, so memory_stats.json lives alongside config.json
             save_memory_stat(Path(checkpoint_dir).parent, "peak_vram_pretrain_gb", peak_mem_gb)
+
+    if total_eval_time > 0:
+        print(f"[NanoTabPFN] Total inline eval time: {total_eval_time:.1f}s")
 
     return model, eval_history
 
@@ -375,7 +398,7 @@ if __name__ == "__main__":
     set_randomness_seed(0)
     device = get_default_device()
     model = NanoTabPFNModel(
-        embedding_size=96,
+        embedding_size=128,
         num_attention_heads=4,
         mlp_hidden_size=192,
         num_layers=3,

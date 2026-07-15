@@ -142,7 +142,7 @@ _PEAK_MEM_BY_DATASET_GB: dict[str, float] = {}
 
 
 def run_tabarena_eval(
-    model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "classification", n_ensemble: int = 8
+    model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "nanotabpfn", n_ensemble: int = 8
 ):
     """Run TabArena evaluation using the provided trained model."""
     global _CURRENT_PYTORCH_MODEL
@@ -170,11 +170,13 @@ def run_tabarena_eval(
         model_verbosity=0,
     ).build_experiments()
 
+    tabpfn_obj = TabArenaContext.SUBSET_PREDICATES["tabpfn"]
+    tabpfn_pred = tabpfn_obj.predicate
+    req_cols = tuple(set((*tabpfn_obj.required_columns, "n_classes")))
+
     TabArenaContext.SUBSET_PREDICATES["nanotabpfn"] = SubsetPredicate(
-        lambda df: (
-            (df["max_train_rows"] <= 3000) & (df["n_features"] <= 45) & (df["n_classes"] > 0) & (df["n_classes"] <= 10)
-        ),
-        ("max_train_rows", "n_features", "n_classes"),
+        lambda df: tabpfn_pred(df) & (df["n_classes"] > 0),
+        req_cols,
     )
 
     context = TabArenaContext()
@@ -195,6 +197,7 @@ def run_tabarena_eval(
     try:
         import pandas as pd
         from sklearn.metrics import log_loss, roc_auc_score
+
         records = []
 
         for res in job_results:
@@ -216,10 +219,10 @@ def run_tabarena_eval(
 
                     if y_pred is not None:
                         # 1. Log Loss
-                        try:
+                        import contextlib
+
+                        with contextlib.suppress(Exception):
                             loss = log_loss(y_true, y_pred, labels=list(range(y_pred.shape[1])))
-                        except Exception:
-                            pass
 
                         # 2. ROC AUC
                         try:
@@ -240,12 +243,7 @@ def run_tabarena_eval(
                     loss = res.get("metric_error")
 
                 if loss is not None or roc_auc is not None:
-                    records.append({
-                        "task_id": task_id,
-                        "fold": fold,
-                        "roc_auc": roc_auc,
-                        "log_loss": loss
-                    })
+                    records.append({"task_id": task_id, "fold": fold, "roc_auc": roc_auc, "log_loss": loss})
 
         if not records:
             print("\nWarning: Could not extract metric scores directly from the job_results list.")
@@ -257,7 +255,7 @@ def run_tabarena_eval(
 
             # Print mean of numeric columns only
             mean_scores = df.mean(numeric_only=True)
-            print(mean_scores.to_string())
+            print(mean_scores.to_string())  # type: ignore
 
             # Save to CSV
             out_csv = Path(results_dir) / "nanotabpfn_summary.csv"
