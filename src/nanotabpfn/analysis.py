@@ -35,7 +35,7 @@ def load_tabarena_scores(results_dir: Path | str, activation: str, metric: str) 
             continue
         df = pd.read_csv(summary_path, index_col="task_id")
         for task_id, row in df.iterrows():
-            if metric not in row or pd.isna(row[metric]):
+            if metric not in row or bool(pd.isna(row[metric])):
                 continue
             scores.setdefault(str(task_id), []).append(float(row[metric]))
     return scores
@@ -141,9 +141,7 @@ def compare_variant_to_baseline(
     variant_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, variant_activation, metric))
 
     improvements = compute_relative_improvement(baseline_scores, variant_scores, higher_is_better)
-    mean_improvement_pct = (
-        100 * sum(improvements.values()) / len(improvements) if improvements else float("nan")
-    )
+    mean_improvement_pct = 100 * sum(improvements.values()) / len(improvements) if improvements else float("nan")
 
     significance = paired_significance_test(baseline_scores, variant_scores)
 

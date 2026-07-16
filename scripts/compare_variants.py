@@ -29,9 +29,7 @@ def main(argv=None):
     args = parse_args(argv)
     results_dir = Path(args.results_dir)
 
-    variant_activations = sorted(
-        d.name for d in results_dir.iterdir() if d.is_dir() and d.name != args.baseline
-    )
+    variant_activations = sorted(d.name for d in results_dir.iterdir() if d.is_dir() and d.name != args.baseline)
 
     rows = []
     for variant in variant_activations:
