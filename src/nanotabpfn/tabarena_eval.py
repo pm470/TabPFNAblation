@@ -14,6 +14,7 @@ from tabarena.nips2025_utils.subset_predicate import SubsetPredicate
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
 
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.utils import save_memory_stat
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -95,6 +96,7 @@ class TabArenaNanoTabPFNModel(AbstractModel):
                 if _CURRENT_DEVICE is not None and _CURRENT_DEVICE.type == "cuda":
                     peak_mem_gb = torch.cuda.max_memory_allocated(_CURRENT_DEVICE) / (1024**3)
                     print(f"[NanoTabPFN] Peak GPU memory allocated for dataset {dataset_id}: {peak_mem_gb:.2f} GB")
+                    _PEAK_MEM_BY_DATASET_GB[dataset_id] = peak_mem_gb
         except Exception:
             pass
 
@@ -136,6 +138,7 @@ _CURRENT_PYTORCH_MODEL: NanoTabPFNModel | None = None
 _CURRENT_DEVICE: torch.device | None = None
 _CURRENT_N_ENSEMBLE: int = 8
 _PRINTED_DATASETS: set[str] = set()
+_PEAK_MEM_BY_DATASET_GB: dict[str, float] = {}
 
 
 def run_tabarena_eval(
@@ -149,6 +152,13 @@ def run_tabarena_eval(
     _CURRENT_PYTORCH_MODEL = model
     _CURRENT_DEVICE = device
     _CURRENT_N_ENSEMBLE = n_ensemble
+
+    # Reset per-run memory tracking state so stale entries from a previous
+    # run_tabarena_eval call (e.g. in the same process/test) don't leak in.
+    _PRINTED_DATASETS.clear()
+    _PEAK_MEM_BY_DATASET_GB.clear()
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     results_dir = str(run_dir / "tabarena_exp")
 
@@ -178,6 +188,10 @@ def run_tabarena_eval(
         new_result_prefix="[New] ",
         debug_mode=True,  # In-process debugging required for our global variable hack
     )
+
+    if device.type == "cuda" and _PEAK_MEM_BY_DATASET_GB:
+        save_memory_stat(run_dir, "peak_vram_eval_gb", max(_PEAK_MEM_BY_DATASET_GB.values()))
+        save_memory_stat(run_dir, "peak_vram_eval_by_dataset_gb", dict(_PEAK_MEM_BY_DATASET_GB))
 
     print("Generating benchmark summary...")
     try:

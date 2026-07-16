@@ -3,6 +3,9 @@
 import os
 import random
 import time
+from collections.abc import Iterable, Iterator
+from pathlib import Path
+from typing import TypedDict
 
 import h5py
 import numpy as np
@@ -14,6 +17,15 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.utils import save_memory_stat
+
+
+class PriorBatch(TypedDict):
+    """A single batch of synthetic prior data."""
+
+    x: torch.Tensor
+    y: torch.Tensor
+    train_test_split_index: int
 
 
 def set_randomness_seed(seed):
@@ -132,7 +144,7 @@ def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
 
 def train(
     model: NanoTabPFNModel,
-    prior: DataLoader | torch.utils.data.IterableDataset,
+    prior: Iterable[PriorBatch],
     lr: float = 1e-4,
     device: torch.device | None = None,
     steps_per_eval=10,
@@ -165,6 +177,8 @@ def train(
     if not device:
         device = get_default_device()
     model.to(device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
 
@@ -258,6 +272,9 @@ def train(
     if device.type == "cuda":
         peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
         print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+        if checkpoint_dir:
+            # checkpoint_dir is run_dir/checkpoints, so memory_stats.json lives alongside config.json
+            save_memory_stat(Path(checkpoint_dir).parent, "peak_vram_pretrain_gb", peak_mem_gb)
 
     if total_eval_time > 0:
         print(f"[NanoTabPFN] Total inline eval time: {total_eval_time:.1f}s")
@@ -285,7 +302,7 @@ class PriorDumpDataLoader(DataLoader):
         with h5py.File(self.filename, "r") as f:
             self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
 
-    def __iter__(self):  # pyright: ignore
+    def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""
         with h5py.File(self.filename, "r") as f:
             for _ in range(self.num_steps):
@@ -303,7 +320,7 @@ class PriorDumpDataLoader(DataLoader):
                     print("Finished iteration over all stored datasets!")
                     self.pointer = 0
 
-                yield dict(
+                yield PriorBatch(
                     x=x.to(self.device),
                     y=y.to(self.device),
                     train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
@@ -344,7 +361,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         self.max_classes = max_classes
         self.device = device if device is not None else get_default_device()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""
         import math
 
@@ -376,7 +393,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
             # 50% to 90% of samples used for training
             train_test_split_index = int(n_samples * np.random.uniform(0.5, 0.9))
 
-            yield dict(
+            yield PriorBatch(
                 x=x_batch.to(self.device),
                 y=y_batch.to(self.device),
                 train_test_split_index=train_test_split_index,
