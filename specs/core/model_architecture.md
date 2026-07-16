@@ -3,7 +3,7 @@ id: CORE-001
 title: "NanoTabPFN Model Architecture"
 status: implemented
 module: model.py
-last_synced: 2026-07-10
+last_synced: 2026-07-15
 ---
 
 # NanoTabPFN Model Architecture
@@ -52,7 +52,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 - [x] AC-24: Training rows attend only to themselves: `self_attention(src[:, :split], src[:, :split], src[:, :split])`.
 - [x] AC-25: Test rows attend only to training rows: `self_attention(src[:, split:], src[:, :split], src[:, :split])`.
 - [x] AC-26: Both attention outputs are concatenated and a residual connection is added from the pre-attention tensor.
-- [x] AC-27: The MLP supports standard activations (GELU, ReLU, SiLU/Swish, Mish) and gated variants (SwiGLU, GeGLU, ReGLU).
+- [x] AC-27: The MLP supports standard activations (GELU, ReLU, Swish, PReLU, Leaky ReLU) and gated variants (SwiGLU, Bilinear).
 
 ### Decoder
 
