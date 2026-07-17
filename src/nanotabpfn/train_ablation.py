@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import (
     PriorDumpDataLoader,
@@ -30,7 +31,7 @@ def parse_args(argv=None):
     parser.add_argument("--num_attention_heads", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
-    parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
+    parser.add_argument("--num_outputs", type=int, default=config.MAX_CLASSES, help="Number of output classes")
     return parser.parse_args(argv)
 
 

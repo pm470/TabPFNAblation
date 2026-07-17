@@ -6,6 +6,7 @@
 - **Docstring convention:** Google style (enforced by `D` / pydocstyle rules)
 - **Line length:** 120 characters
 - **Type checker:** Pyright in basic mode — type hints required on all function signatures
+- **Type Ignores:** Type warnings or errors (`# type: ignore`) should only be ignored if there is a strong, justifiable reason for it (e.g., known limitations in library stubs like pandas).
 - **Excluded from linting:** `prior.py` (upstream nanoTabPFN code, do not modify)
 
 ## Imports

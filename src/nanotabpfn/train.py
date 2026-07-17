@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 from nanotabpfn.utils import save_memory_stat
 
@@ -347,9 +348,9 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         self,
         num_steps: int,
         batch_size: int,
-        max_seq_len: int = 3000,
-        max_features: int = 45,
-        max_classes: int = 10,
+        max_seq_len: int = config.MAX_ROWS,
+        max_features: int = config.MAX_FEATURES,
+        max_classes: int = config.MAX_CLASSES,
         device: torch.device | None = None,
     ):
         """Initialize dataset."""
