@@ -1,5 +1,6 @@
 """Training loops and data loading."""
 
+import contextlib
 import os
 import random
 import time
@@ -154,6 +155,7 @@ def train(
     checkpoint_every: int | None = None,
     checkpoint_every_minutes: float | None = None,
     start_step: int = 0,
+    autocast_dtype: torch.dtype | None = torch.bfloat16,
 ):
     """Trains our model on the given prior using the given criterion.
 
@@ -169,6 +171,8 @@ def train(
         checkpoint_every: (int|None) save a checkpoint every N steps
         checkpoint_every_minutes: (float|None) save a checkpoint every N minutes
         start_step: (int) the starting step to offset logging when resuming
+        autocast_dtype: (torch.dtype|None) dtype for torch.autocast during forward/loss.
+                        Default torch.bfloat16 enables FlashAttention. None disables autocast.
 
     Returns:
         (model) our trained numpy model
@@ -180,6 +184,19 @@ def train(
     model.to(device)
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
+
+    # Set up autocast context for mixed-precision training.
+    # bfloat16 autocast enables FlashAttention (requires bf16/fp16 inputs) while
+    # keeping LayerNorm, softmax, and loss in float32 automatically.
+    if autocast_dtype is not None and device.type in ("cuda",):
+        amp_context = lambda: torch.autocast(device_type=device.type, dtype=autocast_dtype)  # noqa: E731
+        amp_label = str(autocast_dtype).replace("torch.", "")
+        print(f"[NanoTabPFN] Mixed-precision training enabled: autocast dtype={amp_label}")
+    else:
+        amp_context = contextlib.nullcontext  # type: ignore[assignment]
+        if autocast_dtype is not None and device.type not in ("cuda",):
+            print(f"[NanoTabPFN] Autocast requested but device '{device.type}' not supported, running in float32")
+
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
 
@@ -201,13 +218,14 @@ def train(
             data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
-            output = model(data, train_test_split_index=train_test_split_index)
-            targets = targets[:, train_test_split_index:]
+            with amp_context():
+                output = model(data, train_test_split_index=train_test_split_index)
+                targets = targets[:, train_test_split_index:]
 
-            targets = targets.reshape((-1,)).to(torch.long)
-            output = output.view(-1, output.shape[-1])
+                targets = targets.reshape((-1,)).to(torch.long)
+                output = output.view(-1, output.shape[-1])
 
-            loss = criterion(output, targets).mean()
+                loss = criterion(output, targets).mean()
 
             if torch.isnan(loss):
                 print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
@@ -373,7 +391,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         steps = self.num_steps if worker_info is None else math.ceil(self.num_steps / float(worker_info.num_workers))
 
         for _ in range(steps):
-            n_samples = np.random.randint(100, self.max_seq_len + 1)
+            n_samples = np.random.randint(min(100, self.max_seq_len), self.max_seq_len + 1)
             n_features = np.random.randint(2, self.max_features + 1)
             n_classes = np.random.randint(2, self.max_classes + 1)
 
