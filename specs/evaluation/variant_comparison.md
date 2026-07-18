@@ -1,9 +1,9 @@
 ---
 id: EVAL-004
 title: "Variant Comparison"
-status: new
+status: implemented
 module: analysis.py
-last_synced: 2026-07-11
+last_synced: 2026-07-18
 ---
 
 # Variant Comparison
@@ -20,37 +20,37 @@ statistically significant.
 
 ### load_tabarena_scores()
 
-- [ ] AC-1: Reads `results/{activation}/seed_*/tabarena_exp/nanotabpfn_summary.csv` for every seed of the given activation.
-- [ ] AC-2: Returns a dict mapping `task_id` to the list of per-seed scores for the requested metric column.
-- [ ] AC-3: Skips seed directories with no `nanotabpfn_summary.csv` and rows with a missing/NaN value for the requested metric.
+- [x] AC-1: Reads `results/{activation}/seed_*/benchmark_final/tabarena_exp/nanotabpfn_summary.csv` for every seed of the given activation.
+- [x] AC-2: Returns a dict mapping `task_id` to the list of per-seed scores for the requested metric column.
+- [x] AC-3: Skips seed directories with no `nanotabpfn_summary.csv` and rows with a missing/NaN value for the requested metric.
 
 ### aggregate_seed_scores()
 
-- [ ] AC-4: Averages the per-seed score list for each `task_id` into a single mean score.
+- [x] AC-4: Averages the per-seed score list for each `task_id` into a single mean score.
 
 ### compute_relative_improvement()
 
-- [ ] AC-5: For `higher_is_better=True` (ROC-AUC), improvement is `(variant - baseline) / |baseline|` per dataset.
-- [ ] AC-6: For `higher_is_better=False` (log loss), improvement is `(baseline - variant) / |baseline|` per dataset, so a lower variant loss counts as a positive improvement.
-- [ ] AC-7: Only computes improvement for `task_id`s present in both baseline and variant; datasets present in only one are dropped.
-- [ ] AC-8: Normalizing by the baseline score means a fixed absolute gap counts for more on datasets with a smaller baseline score, preventing large-scale datasets from dominating the aggregate.
+- [x] AC-5: For `higher_is_better=True` (ROC-AUC), improvement is `(variant - baseline) / |baseline|` per dataset.
+- [x] AC-6: For `higher_is_better=False` (log loss), improvement is `(baseline - variant) / |baseline|` per dataset, so a lower variant loss counts as a positive improvement.
+- [x] AC-7: Only computes improvement for `task_id`s present in both baseline and variant; datasets present in only one are dropped.
+- [x] AC-8: Normalizing by the baseline score means a fixed absolute gap counts for more on datasets with a smaller baseline score, preventing large-scale datasets from dominating the aggregate.
 
 ### paired_significance_test()
 
-- [ ] AC-9: Pairs baseline and variant scores by `task_id` (one pair per dataset, each side already averaged across seeds).
-- [ ] AC-10: Runs `scipy.stats.ttest_rel` on the paired vectors and returns `t_statistic`, `p_value`, `significant` (`p_value < 0.05`), and `n_datasets`.
-- [ ] AC-11: Returns `significant=False` and NaN statistics when fewer than 2 common datasets are available (a t-test is undefined below that).
+- [x] AC-9: Pairs baseline and variant scores by `task_id` (one pair per dataset, each side already averaged across seeds).
+- [x] AC-10: Runs `scipy.stats.ttest_rel` on the paired vectors and returns `t_statistic`, `p_value`, `significant` (`p_value < 0.05`), and `n_datasets`.
+- [x] AC-11: Returns `significant=False` and NaN statistics when fewer than 2 common datasets are available (a t-test is undefined below that).
 
 ### compare_variant_to_baseline()
 
-- [ ] AC-12: Orchestrates load → seed-aggregate → relative improvement → significance test for one `(baseline, variant, metric)` triple.
-- [ ] AC-13: Returns `mean_relative_improvement_pct` as the mean of per-dataset relative improvements, expressed as a percentage.
+- [x] AC-12: Orchestrates load → seed-aggregate → relative improvement → significance test for one `(baseline, variant, metric)` triple.
+- [x] AC-13: Returns `mean_relative_improvement_pct` as the mean of per-dataset relative improvements, expressed as a percentage.
 
 ### scripts/compare_variants.py
 
-- [ ] AC-14: Discovers all activation subdirectories under `--results_dir` other than `--baseline`.
-- [ ] AC-15: Runs the comparison for both `roc_auc` and `log_loss` for every discovered variant.
-- [ ] AC-16: Prints the resulting table and saves it to `--output_csv` (default `{results_dir}/variant_comparison.csv`).
+- [x] AC-14: Discovers all activation subdirectories under `--results_dir` other than `--baseline`.
+- [x] AC-15: Runs the comparison for both `roc_auc` and `log_loss` for every discovered variant.
+- [x] AC-16: Prints the resulting table and saves it to `--output_csv` (default `{results_dir}/variant_comparison.csv`).
 
 ## Notes
 

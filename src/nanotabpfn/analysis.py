@@ -16,13 +16,14 @@ METRICS = {
 }
 
 
-def load_tabarena_scores(results_dir: Path | str, activation: str, metric: str) -> dict[str, list[float]]:
+def load_tabarena_scores(results_dir: Path | str, activation: str, metric: str, split: str = "all") -> dict[str, list[float]]:
     """Load per-dataset scores for one activation across all its seed runs.
 
     Args:
         results_dir: Base results directory (e.g. `results/`).
         activation: Activation subdirectory name (e.g. `"gelu"`, `"swiglu"`).
         metric: Column to read from `nanotabpfn_summary.csv` (`"roc_auc"` or `"log_loss"`).
+        split: Which datasets to include (`"all"`, `"id"`, or `"ood"`).
 
     Returns:
         Mapping of `task_id` to the list of per-seed scores for that dataset.
@@ -30,11 +31,15 @@ def load_tabarena_scores(results_dir: Path | str, activation: str, metric: str) 
     activation_dir = Path(results_dir) / activation
     scores: dict[str, list[float]] = {}
     for seed_dir in sorted(activation_dir.glob("seed_*")):
-        summary_path = seed_dir / "tabarena_exp" / "nanotabpfn_summary.csv"
+        summary_path = seed_dir / "benchmark_final" / "tabarena_exp" / "nanotabpfn_summary.csv"
         if not summary_path.exists():
             continue
         df = pd.read_csv(summary_path, index_col="task_id")
         for task_id, row in df.iterrows():
+            if split == "id" and bool(row.get("is_ood", False)):
+                continue
+            if split == "ood" and not bool(row.get("is_ood", False)):
+                continue
             if metric not in row or bool(pd.isna(row[metric])):
                 continue
             scores.setdefault(str(task_id), []).append(float(row[metric]))
@@ -126,7 +131,7 @@ def paired_significance_test(baseline: dict[str, float], variant: dict[str, floa
 
 
 def compare_variant_to_baseline(
-    results_dir: Path | str, baseline_activation: str, variant_activation: str, metric: str
+    results_dir: Path | str, baseline_activation: str, variant_activation: str, metric: str, split: str = "all"
 ) -> dict:
     """Compare one activation variant to the baseline for a single metric.
 
@@ -135,15 +140,19 @@ def compare_variant_to_baseline(
         baseline_activation: Baseline activation name (e.g. `"gelu"`).
         variant_activation: Variant activation name (e.g. `"swiglu"`).
         metric: `"roc_auc"` or `"log_loss"`.
+        split: Which datasets to include (`"all"`, `"id"`, or `"ood"`).
 
     Returns:
-        Dict with `variant`, `metric`, `mean_relative_improvement_pct`,
-        `t_statistic`, `p_value`, `significant`, and `n_datasets`.
+        Dict with `variant`, `metric`, `split`, `baseline_mean`, `variant_mean`,
+        `mean_relative_improvement_pct`, `t_statistic`, `p_value`, `significant`, and `n_datasets`.
     """
     higher_is_better = METRICS[metric]
 
-    baseline_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, baseline_activation, metric))
-    variant_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, variant_activation, metric))
+    baseline_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, baseline_activation, metric, split))
+    variant_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, variant_activation, metric, split))
+
+    mean_baseline = sum(baseline_scores.values()) / len(baseline_scores) if baseline_scores else float("nan")
+    mean_variant = sum(variant_scores.values()) / len(variant_scores) if variant_scores else float("nan")
 
     improvements = compute_relative_improvement(baseline_scores, variant_scores, higher_is_better)
     mean_improvement_pct = 100 * sum(improvements.values()) / len(improvements) if improvements else float("nan")
@@ -153,6 +162,9 @@ def compare_variant_to_baseline(
     return {
         "variant": variant_activation,
         "metric": metric,
+        "split": split,
+        "baseline_mean": mean_baseline,
+        "variant_mean": mean_variant,
         "mean_relative_improvement_pct": mean_improvement_pct,
         **significance,
     }
