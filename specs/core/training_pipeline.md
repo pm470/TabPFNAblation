@@ -3,7 +3,7 @@ id: CORE-002
 title: "Training Pipeline"
 status: implemented
 module: train.py
-last_synced: 2026-07-17
+last_synced: 2026-07-18
 ---
 
 # Training Pipeline

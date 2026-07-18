@@ -25,10 +25,10 @@ def run_training(seed):
         max_classes=2,
         device=torch.device("cpu"),
     )
-    prior = DataLoader(prior_dataset, batch_size=None, num_workers=0)
+    prior_loader = DataLoader(prior_dataset, batch_size=None, num_workers=0)
     trained_model, _ = train(
         model,
-        prior,
+        prior_loader,
         lr=1e-3,
         device=torch.device("cpu"),
         steps_per_eval=100,
