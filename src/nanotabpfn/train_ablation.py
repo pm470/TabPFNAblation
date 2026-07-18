@@ -4,6 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
+
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import (
     PriorDumpDataLoader,
@@ -30,7 +33,8 @@ def parse_args(argv=None):
     parser.add_argument("--num_attention_heads", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
-    parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
+    parser.add_argument("--num_outputs", type=int, default=config.MAX_CLASSES, help="Number of output classes")
+    parser.add_argument("--no-autocast", action="store_true", help="Disable bfloat16 autocast (use pure float32)")
     return parser.parse_args(argv)
 
 
@@ -53,6 +57,8 @@ def run_training(args):
     )
 
     param_count = sum(p.numel() for p in model.parameters())
+    autocast_dtype = None if args.no_autocast else torch.bfloat16
+
     config = {
         "activation": args.activation,
         "data_file": args.data_file,
@@ -70,6 +76,7 @@ def run_training(args):
         "num_outputs": args.num_outputs,
         "param_count": param_count,
         "device": str(device),
+        "autocast_dtype": str(autocast_dtype) if autocast_dtype else None,
     }
 
     config_path = run_dir / "config.json"
@@ -98,6 +105,7 @@ def run_training(args):
         checkpoint_dir=str(checkpoint_dir),
         checkpoint_every=args.checkpoint_every,
         checkpoint_every_minutes=args.checkpoint_every_minutes,
+        autocast_dtype=autocast_dtype,
     )
 
     metrics_path = run_dir / "metrics.jsonl"

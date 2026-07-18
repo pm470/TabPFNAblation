@@ -2,8 +2,8 @@
 #SBATCH --job-name=tabpfn_train
 #SBATCH --output=logs/train_%A_%a.out
 #SBATCH --error=logs/train_%A_%a.err
-#SBATCH --time=02:00:00
-#SBATCH --partition=gpu_a100_il
+#SBATCH --time=00:30:00
+#SBATCH --partition=gpu_a100_short
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
@@ -55,8 +55,10 @@ UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u run_experiment.py \
   --activation "$ACTIVATION" \
   --seed "$SEED" \
   --num_steps 5000 \
+  --batch_size 8 \
+  --lr 1e-3 \
   --eval_every 250 \
-  --checkpoint_every 1000 \
+  --checkpoint_every 250 \
   --max_seq_len 3000 \
   --max_features 45 \
   --max_classes 10 \

@@ -3,7 +3,7 @@ id: CORE-002
 title: "Training Pipeline"
 status: implemented
 module: train.py
-last_synced: 2026-07-15
+last_synced: 2026-07-18
 ---
 
 # Training Pipeline
@@ -74,8 +74,17 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-29: The `num_classes` parameter is randomized per batch but bounded by `max_classes`.
 - [x] AC-30: Yields tensors matching the `x` and `y` shapes expected by `NanoTabPFNModel`.
 
+### Mixed-Precision Training
+
+- [x] AC-31: The forward pass and loss computation are wrapped in `torch.autocast(device_type=..., dtype=torch.bfloat16)` when the device supports it (CUDA or ROCm). On CPU/MPS, autocast is not used.
+- [x] AC-32: Model parameters remain in float32 (master weights). Autocast handles the temporary bf16 downcast for compute-heavy ops (Linear, attention) while keeping precision-sensitive ops (LayerNorm, softmax, loss) in float32.
+- [x] AC-33: No `GradScaler` is used — bfloat16 has the same dynamic range as float32, so loss scaling is unnecessary.
+- [x] AC-34: The `train()` function accepts an `autocast_dtype` parameter (default: `torch.bfloat16`) that controls the autocast dtype. Passing `None` disables autocast entirely.
+- [x] AC-35: The autocast dtype is logged in the experiment config JSON.
+
 ## Notes
 
 - The ScheduleFree optimizer eliminates the need for a learning rate scheduler while maintaining competitive performance.
 - The `weight_decay=0.0` is explicit — no weight decay is applied.
 - Training data (`y`) is sliced to only training rows (`y[:, :train_test_split_index]`) before being passed to the model, while full `y` is kept for computing loss on test rows.
+- Mixed-precision with bfloat16 autocast enables FlashAttention (which requires bf16/fp16 inputs) while maintaining float32 numerical stability in normalization layers and the optimizer. This follows the same approach used by Google's TabFM.

@@ -183,17 +183,20 @@ class TransformerEncoderLayer(nn.Module):
         src = src.transpose(1, 2)
         src = src.reshape(batch_size * col_size, rows_size, embedding_size)
         # training data attends to itself
+        train_src = src[:, :train_test_split_index].contiguous()
+        test_src = src[:, train_test_split_index:].contiguous()
+
         src_left = self.self_attention_between_datapoints(
-            src[:, :train_test_split_index],
-            src[:, :train_test_split_index],
-            src[:, :train_test_split_index],
+            train_src,
+            train_src,
+            train_src,
             need_weights=False,
         )[0]
         # test data attends to the training data
         src_right = self.self_attention_between_datapoints(
-            src[:, train_test_split_index:],
-            src[:, :train_test_split_index],
-            src[:, :train_test_split_index],
+            test_src,
+            train_src,
+            train_src,
             need_weights=False,
         )[0]
         src = torch.cat([src_left, src_right], dim=1) + src

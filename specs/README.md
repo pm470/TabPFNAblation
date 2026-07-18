@@ -72,7 +72,8 @@ specs/
 ├── evaluation/
 │   ├── local_eval.md                  # EVAL-001
 │   ├── tabarena_eval.md               # EVAL-002
-│   └── plotting.md                    # EVAL-003
+│   ├── plotting.md                    # EVAL-003
+│   └── variant_comparison.md          # EVAL-004
 └── experiment/
     ├── activation_ablation.md         # EXP-001
     └── run_orchestration.md           # EXP-002

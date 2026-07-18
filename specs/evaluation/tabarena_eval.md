@@ -44,6 +44,8 @@ As a researcher, I want to evaluate my trained model on the TabArena benchmark s
 - [x] AC-18.2: Bypasses TabArena's `context.compare()` and instead manually parses the `list[dict]` returned by `build_and_run_jobs`.
 - [x] AC-18.3: Computes metrics (ROC-AUC and Log Loss) natively via `sklearn.metrics` directly from the raw test probabilities (`pred_proba_dict_test`) and labels (`y_test`) nested inside `simulation_artifacts`. Handles `problem_type == "binary"` arrays correctly and dynamically suppresses `roc_auc` dimension mismatch or missing class errors using `labels=...`.
 - [x] AC-18.4: Saves a clean CSV (`nanotabpfn_summary.csv`) containing average metric scores grouped by `task_id`.
+- [x] AC-18.5: Flags datasets as out-of-distribution (OOD) if they exceed training limits defined in `config.py` (`num_instances > config.MAX_ROWS`, `n_features > config.MAX_FEATURES`, or `n_classes > config.MAX_CLASSES`).
+- [x] AC-18.6: Outputs separate mean score summaries for All datasets, In-Distribution datasets, and Out-Of-Distribution datasets, and includes the `is_ood` flag in the final summary CSV.
 
 ### Global Model Sharing
 

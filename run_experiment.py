@@ -50,6 +50,7 @@ def parse_args(argv=None):
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
     parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
+    parser.add_argument("--no-autocast", action="store_true", help="Disable bfloat16 autocast (use pure float32)")
     return parser.parse_args(argv)
 
 
@@ -76,6 +77,9 @@ def run_experiment(args):
 
     # Save config
     param_count = sum(p.numel() for p in model.parameters())
+    # Resolve autocast dtype
+    autocast_dtype = None if args.no_autocast else torch.bfloat16
+
     config = {
         "activation": args.activation,
         "benchmark": args.benchmark,
@@ -96,6 +100,7 @@ def run_experiment(args):
         "data_file": args.data_file,
         "param_count": param_count,
         "device": str(device),
+        "autocast_dtype": str(autocast_dtype) if autocast_dtype else None,
     }
     config_path = run_dir / "config.json"
     with open(config_path, "w") as f:
@@ -146,6 +151,9 @@ def run_experiment(args):
         # Using 0 workers for safety/compatibility; increase if CPU allows.
         prior = DataLoader(dataset, batch_size=None, num_workers=0)
 
+    # Setup metrics file
+    metrics_path = run_dir / "metrics.jsonl"
+
     # Train
     model, eval_history = train(
         model,
@@ -157,16 +165,11 @@ def run_experiment(args):
         checkpoint_dir=str(checkpoint_dir),
         checkpoint_every=args.checkpoint_every,
         start_step=start_step,
+        autocast_dtype=autocast_dtype,
+        metrics_file=metrics_path,
     )
 
-    # Save metrics as JSONL
-    metrics_path = run_dir / "metrics.jsonl"
-    mode = "a" if start_step > 0 else "w"
-    with open(metrics_path, mode) as f:
-        for entry in eval_history:
-            f.write(json.dumps(entry) + "\n")
-    print(f"\nMetrics saved to {metrics_path}")
-    print(f"Checkpoints saved to {checkpoint_dir}")
+    print(f"\nTraining completed. Checkpoints saved to {checkpoint_dir}")
 
     # Final evaluation
     model.eval()

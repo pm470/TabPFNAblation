@@ -13,6 +13,7 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.nips2025_utils.subset_predicate import SubsetPredicate
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
 
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 from nanotabpfn.utils import save_memory_stat
 
@@ -199,12 +200,27 @@ def run_tabarena_eval(
         from sklearn.metrics import log_loss, roc_auc_score
 
         records = []
+        task_meta_df = context.task_metadata
 
         for res in job_results:
             if isinstance(res, dict):
                 task_id = res.get("task_metadata", {}).get("tid", "unknown")
                 fold = res.get("task_metadata", {}).get("fold", "unknown")
                 framework = res.get("framework")
+
+                is_ood = False
+                if task_id != "unknown":
+                    row = task_meta_df[task_meta_df["tid"] == task_id]
+                    if not row.empty:
+                        num_instances = row.iloc[0]["num_instances"]
+                        n_features = row.iloc[0]["n_features"]
+                        n_classes = row.iloc[0]["n_classes"]
+                        if (
+                            num_instances > config.MAX_ROWS
+                            or n_features > config.MAX_FEATURES
+                            or n_classes > config.MAX_CLASSES
+                        ):
+                            is_ood = True
 
                 roc_auc = None
                 loss = None
@@ -243,7 +259,9 @@ def run_tabarena_eval(
                     loss = res.get("metric_error")
 
                 if loss is not None or roc_auc is not None:
-                    records.append({"task_id": task_id, "fold": fold, "roc_auc": roc_auc, "log_loss": loss})
+                    records.append(
+                        {"task_id": task_id, "fold": fold, "roc_auc": roc_auc, "log_loss": loss, "is_ood": is_ood}
+                    )
 
         if not records:
             print("\nWarning: Could not extract metric scores directly from the job_results list.")
@@ -251,15 +269,35 @@ def run_tabarena_eval(
         else:
             df = pd.DataFrame(records)
             print(f"\nTabArena evaluation completed. Results in {results_dir}")
-            print("\nFinal Mean Scores (over all datasets & folds):")
 
-            # Print mean of numeric columns only
-            mean_scores = df.mean(numeric_only=True)
-            print(mean_scores.to_string())  # type: ignore
+            print("\nFinal Mean Scores (All datasets & folds):")
+            print(df.drop(columns=["task_id", "fold", "is_ood"], errors="ignore").mean(numeric_only=True).to_string())  # type: ignore
+
+            id_df = df[~df["is_ood"]]
+            print(f"\nFinal Mean Scores (In-Distribution, n={id_df['task_id'].nunique()}):")  # type: ignore
+            if not id_df.empty:
+                print(
+                    id_df.drop(columns=["task_id", "fold", "is_ood"], errors="ignore")
+                    .mean(numeric_only=True)
+                    .to_string()  # type: ignore
+                )
+            else:
+                print("None")
+
+            ood_df = df[df["is_ood"]]
+            print(f"\nFinal Mean Scores (Out-of-Distribution, n={ood_df['task_id'].nunique()}):")  # type: ignore
+            if not ood_df.empty:
+                print(
+                    ood_df.drop(columns=["task_id", "fold", "is_ood"], errors="ignore")
+                    .mean(numeric_only=True)
+                    .to_string()  # type: ignore
+                )
+            else:
+                print("None")
 
             # Save to CSV
             out_csv = Path(results_dir) / "nanotabpfn_summary.csv"
-            df.groupby("task_id").mean(numeric_only=True).to_csv(out_csv)
+            df.groupby("task_id").agg({"roc_auc": "mean", "log_loss": "mean", "is_ood": "first"}).to_csv(out_csv)
             print(f"\nSaved per-dataset summary to: {out_csv}")
 
     except Exception as e:
