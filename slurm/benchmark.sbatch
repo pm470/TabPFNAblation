@@ -2,8 +2,8 @@
 #SBATCH --job-name=tabpfn_bench
 #SBATCH --output=logs/bench_%A_%a.out
 #SBATCH --error=logs/bench_%A_%a.err
-#SBATCH --time=02:30:00
-#SBATCH --partition=gpu_a100
+#SBATCH --time=00:30:00
+#SBATCH --partition=gpu_a100_short
 #SBATCH --gres=gpu:1
 #SBATCH --mem=48G
 #SBATCH --cpus-per-task=8
@@ -41,11 +41,11 @@ ACTIVATION="${ACTIVATION:-gelu}"
 # The checkpoint is loaded from the workspace results directory
 CHECKPOINT_DIR="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints"
 
-echo "Starting TabArena Benchmark for all checkpoints in ${CHECKPOINT_DIR}"
+echo "Starting TabArena Benchmark for final checkpoint in ${CHECKPOINT_DIR}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u scripts/benchmark_model.py \
-    --checkpoint-dir "$CHECKPOINT_DIR" \
+    --checkpoint "${CHECKPOINT_DIR}/final.pt" \
     --activation "$ACTIVATION" \
     --subset "nanotabpfn" \
     --n_ensemble 8

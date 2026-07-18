@@ -13,7 +13,9 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.nips2025_utils.subset_predicate import SubsetPredicate
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
 
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.utils import save_memory_stat
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -95,6 +97,7 @@ class TabArenaNanoTabPFNModel(AbstractModel):
                 if _CURRENT_DEVICE is not None and _CURRENT_DEVICE.type == "cuda":
                     peak_mem_gb = torch.cuda.max_memory_allocated(_CURRENT_DEVICE) / (1024**3)
                     print(f"[NanoTabPFN] Peak GPU memory allocated for dataset {dataset_id}: {peak_mem_gb:.2f} GB")
+                    _PEAK_MEM_BY_DATASET_GB[dataset_id] = peak_mem_gb
         except Exception:
             pass
 
@@ -136,10 +139,11 @@ _CURRENT_PYTORCH_MODEL: NanoTabPFNModel | None = None
 _CURRENT_DEVICE: torch.device | None = None
 _CURRENT_N_ENSEMBLE: int = 8
 _PRINTED_DATASETS: set[str] = set()
+_PEAK_MEM_BY_DATASET_GB: dict[str, float] = {}
 
 
 def run_tabarena_eval(
-    model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "classification", n_ensemble: int = 8
+    model: NanoTabPFNModel, device: torch.device, run_dir: Path, subset: str = "nanotabpfn", n_ensemble: int = 8
 ):
     """Run TabArena evaluation using the provided trained model."""
     global _CURRENT_PYTORCH_MODEL
@@ -149,6 +153,13 @@ def run_tabarena_eval(
     _CURRENT_PYTORCH_MODEL = model
     _CURRENT_DEVICE = device
     _CURRENT_N_ENSEMBLE = n_ensemble
+
+    # Reset per-run memory tracking state so stale entries from a previous
+    # run_tabarena_eval call (e.g. in the same process/test) don't leak in.
+    _PRINTED_DATASETS.clear()
+    _PEAK_MEM_BY_DATASET_GB.clear()
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     results_dir = str(run_dir / "tabarena_exp")
 
@@ -160,11 +171,13 @@ def run_tabarena_eval(
         model_verbosity=0,
     ).build_experiments()
 
+    tabpfn_obj = TabArenaContext.SUBSET_PREDICATES["tabpfn"]
+    tabpfn_pred = tabpfn_obj.predicate
+    req_cols = tuple(set((*tabpfn_obj.required_columns, "n_classes")))
+
     TabArenaContext.SUBSET_PREDICATES["nanotabpfn"] = SubsetPredicate(
-        lambda df: (
-            (df["max_train_rows"] <= 3000) & (df["n_features"] <= 45) & (df["n_classes"] > 0) & (df["n_classes"] <= 10)
-        ),
-        ("max_train_rows", "n_features", "n_classes"),
+        lambda df: tabpfn_pred(df) & (df["n_classes"] > 0),
+        req_cols,
     )
 
     context = TabArenaContext()
@@ -177,18 +190,37 @@ def run_tabarena_eval(
         debug_mode=True,  # In-process debugging required for our global variable hack
     )
 
+    if device.type == "cuda" and _PEAK_MEM_BY_DATASET_GB:
+        save_memory_stat(run_dir, "peak_vram_eval_gb", max(_PEAK_MEM_BY_DATASET_GB.values()))
+        save_memory_stat(run_dir, "peak_vram_eval_by_dataset_gb", dict(_PEAK_MEM_BY_DATASET_GB))
+
     print("Generating benchmark summary...")
     try:
         import pandas as pd
         from sklearn.metrics import log_loss, roc_auc_score
 
         records = []
+        task_meta_df = context.task_metadata
 
         for res in job_results:
             if isinstance(res, dict):
                 task_id = res.get("task_metadata", {}).get("tid", "unknown")
                 fold = res.get("task_metadata", {}).get("fold", "unknown")
                 framework = res.get("framework")
+
+                is_ood = False
+                if task_id != "unknown":
+                    row = task_meta_df[task_meta_df["tid"] == task_id]
+                    if not row.empty:
+                        num_instances = row.iloc[0]["num_instances"]
+                        n_features = row.iloc[0]["n_features"]
+                        n_classes = row.iloc[0]["n_classes"]
+                        if (
+                            num_instances > config.MAX_ROWS
+                            or n_features > config.MAX_FEATURES
+                            or n_classes > config.MAX_CLASSES
+                        ):
+                            is_ood = True
 
                 roc_auc = None
                 loss = None
@@ -227,7 +259,9 @@ def run_tabarena_eval(
                     loss = res.get("metric_error")
 
                 if loss is not None or roc_auc is not None:
-                    records.append({"task_id": task_id, "fold": fold, "roc_auc": roc_auc, "log_loss": loss})
+                    records.append(
+                        {"task_id": task_id, "fold": fold, "roc_auc": roc_auc, "log_loss": loss, "is_ood": is_ood}
+                    )
 
         if not records:
             print("\nWarning: Could not extract metric scores directly from the job_results list.")
@@ -235,15 +269,35 @@ def run_tabarena_eval(
         else:
             df = pd.DataFrame(records)
             print(f"\nTabArena evaluation completed. Results in {results_dir}")
-            print("\nFinal Mean Scores (over all datasets & folds):")
 
-            # Print mean of numeric columns only
-            mean_scores = df.mean(numeric_only=True)
-            print(mean_scores.to_string())  # type: ignore
+            print("\nFinal Mean Scores (All datasets & folds):")
+            print(df.drop(columns=["task_id", "fold", "is_ood"], errors="ignore").mean(numeric_only=True).to_string())  # type: ignore
+
+            id_df = df[~df["is_ood"]]
+            print(f"\nFinal Mean Scores (In-Distribution, n={id_df['task_id'].nunique()}):")  # type: ignore
+            if not id_df.empty:
+                print(
+                    id_df.drop(columns=["task_id", "fold", "is_ood"], errors="ignore")
+                    .mean(numeric_only=True)
+                    .to_string()  # type: ignore
+                )
+            else:
+                print("None")
+
+            ood_df = df[df["is_ood"]]
+            print(f"\nFinal Mean Scores (Out-of-Distribution, n={ood_df['task_id'].nunique()}):")  # type: ignore
+            if not ood_df.empty:
+                print(
+                    ood_df.drop(columns=["task_id", "fold", "is_ood"], errors="ignore")
+                    .mean(numeric_only=True)
+                    .to_string()  # type: ignore
+                )
+            else:
+                print("None")
 
             # Save to CSV
             out_csv = Path(results_dir) / "nanotabpfn_summary.csv"
-            df.groupby("task_id").mean(numeric_only=True).to_csv(out_csv)
+            df.groupby("task_id").agg({"roc_auc": "mean", "log_loss": "mean", "is_ood": "first"}).to_csv(out_csv)
             print(f"\nSaved per-dataset summary to: {out_csv}")
 
     except Exception as e:

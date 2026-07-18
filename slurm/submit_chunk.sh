@@ -13,16 +13,13 @@ CHUNK=$1
 # Define the 15 activations split into 3 fair-share chunks
 case $CHUNK in
 1)
-  # TODO: Replace with the first 5 functions (e.g., "gelu" "swiglu" ...)
-  ACTIVATIONS=("func1" "func2" "func3" "func4" "func5")
+  ACTIVATIONS=("gelu" "relu" "swish")
   ;;
 2)
-  # TODO: Replace with the next 5 functions
-  ACTIVATIONS=("func6" "func7" "func8" "func9" "func10")
+  ACTIVATIONS=("prelu" "leaky_relu")
   ;;
 3)
-  # TODO: Replace with the final 5 functions
-  ACTIVATIONS=("func11" "func12" "func13" "func14" "func15")
+  ACTIVATIONS=("swiglu" "bilinear")
   ;;
 *)
   echo "Error: Invalid chunk number. Please use 1, 2, or 3."

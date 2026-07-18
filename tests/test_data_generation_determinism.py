@@ -23,10 +23,12 @@ def test_same_seed_produces_identical_batch():
     batch_a = get_first_batch(42)
     batch_b = get_first_batch(42)
 
-    assert isinstance(batch_a["x"], torch.Tensor) and isinstance(batch_b["x"], torch.Tensor)
-    assert isinstance(batch_a["y"], torch.Tensor) and isinstance(batch_b["y"], torch.Tensor)
-    assert torch.equal(batch_a["x"], batch_b["x"])
-    assert torch.equal(batch_a["y"], batch_b["y"])
+    x_a, x_b = batch_a["x"], batch_b["x"]
+    y_a, y_b = batch_a["y"], batch_b["y"]
+    assert isinstance(x_a, torch.Tensor) and isinstance(x_b, torch.Tensor)
+    assert isinstance(y_a, torch.Tensor) and isinstance(y_b, torch.Tensor)
+    assert torch.equal(x_a, x_b)
+    assert torch.equal(y_a, y_b)
     assert batch_a["train_test_split_index"] == batch_b["train_test_split_index"]
 
 
@@ -35,16 +37,11 @@ def test_different_seeds_produce_different_batch():
     batch_a = get_first_batch(0)
     batch_b = get_first_batch(1)
 
-    same_x = (
-        isinstance(batch_a["x"], torch.Tensor)
-        and isinstance(batch_b["x"], torch.Tensor)
-        and batch_a["x"].shape == batch_b["x"].shape
-        and torch.equal(batch_a["x"], batch_b["x"])
-    )
-    same_y = (
-        isinstance(batch_a["y"], torch.Tensor)
-        and isinstance(batch_b["y"], torch.Tensor)
-        and batch_a["y"].shape == batch_b["y"].shape
-        and torch.equal(batch_a["y"], batch_b["y"])
-    )
+    x_a, x_b = batch_a["x"], batch_b["x"]
+    y_a, y_b = batch_a["y"], batch_b["y"]
+    assert isinstance(x_a, torch.Tensor) and isinstance(x_b, torch.Tensor)
+    assert isinstance(y_a, torch.Tensor) and isinstance(y_b, torch.Tensor)
+
+    same_x = x_a.shape == x_b.shape and torch.equal(x_a, x_b)
+    same_y = y_a.shape == y_b.shape and torch.equal(y_a, y_b)
     assert not (same_x and same_y), "Different seeds produced an identical batch"

@@ -15,7 +15,9 @@ def run_training(seed):
         num_layers=1,
         num_outputs=2,
     )
-    prior = NanopriorDataset(
+    from torch.utils.data import DataLoader
+
+    prior_dataset = NanopriorDataset(
         num_steps=3,
         batch_size=2,
         max_seq_len=150,

@@ -1,8 +1,12 @@
 """Training loops and data loading."""
 
+import contextlib
 import os
 import random
 import time
+from collections.abc import Iterable, Iterator
+from pathlib import Path
+from typing import TypedDict
 
 import h5py
 import numpy as np
@@ -13,7 +17,17 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.utils import save_memory_stat
+
+
+class PriorBatch(TypedDict):
+    """A single batch of synthetic prior data."""
+
+    x: torch.Tensor
+    y: torch.Tensor
+    train_test_split_index: int
 
 
 def set_randomness_seed(seed):
@@ -132,7 +146,7 @@ def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
 
 def train(
     model: NanoTabPFNModel,
-    prior: DataLoader,
+    prior: Iterable[PriorBatch],
     lr: float = 1e-4,
     device: torch.device | None = None,
     steps_per_eval=10,
@@ -141,7 +155,9 @@ def train(
     checkpoint_every: int | None = None,
     checkpoint_every_minutes: float | None = None,
     start_step: int = 0,
-):
+    autocast_dtype: torch.dtype | None = torch.bfloat16,
+    metrics_file: str | Path | None = None,
+) -> tuple[NanoTabPFNModel, list[dict]]:
     """Trains our model on the given prior using the given criterion.
 
     Args:
@@ -156,6 +172,9 @@ def train(
         checkpoint_every: (int|None) save a checkpoint every N steps
         checkpoint_every_minutes: (float|None) save a checkpoint every N minutes
         start_step: (int) the starting step to offset logging when resuming
+        autocast_dtype: (torch.dtype|None) dtype for torch.autocast during forward/loss.
+                        Default torch.bfloat16 enables FlashAttention. None disables autocast.
+        metrics_file: (str|Path|None) path to a JSONL file to stream evaluation metrics dynamically.
 
     Returns:
         (model) our trained numpy model
@@ -165,6 +184,21 @@ def train(
     if not device:
         device = get_default_device()
     model.to(device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+
+    # Set up autocast context for mixed-precision training.
+    # bfloat16 autocast enables FlashAttention (requires bf16/fp16 inputs) while
+    # keeping LayerNorm, softmax, and loss in float32 automatically.
+    if autocast_dtype is not None and device.type in ("cuda",):
+        amp_context = lambda: torch.autocast(device_type=device.type, dtype=autocast_dtype)  # noqa: E731
+        amp_label = str(autocast_dtype).replace("torch.", "")
+        print(f"[NanoTabPFN] Mixed-precision training enabled: autocast dtype={amp_label}")
+    else:
+        amp_context = contextlib.nullcontext  # type: ignore[assignment]
+        if autocast_dtype is not None and device.type not in ("cuda",):
+            print(f"[NanoTabPFN] Autocast requested but device '{device.type}' not supported, running in float32")
+
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
 
@@ -186,13 +220,35 @@ def train(
             data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
-            output = model(data, train_test_split_index=train_test_split_index)
-            targets = targets[:, train_test_split_index:]
+            with amp_context():
+                # On CUDA, enforce Flash/MemEfficient Attention to prevent silent math backend fallback OOMs.
+                if device.type == "cuda":
+                    from torch.nn.attention import SDPBackend, sdpa_kernel
 
-            targets = targets.reshape((-1,)).to(torch.long)
-            output = output.view(-1, output.shape[-1])
+                    try:
+                        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
+                            output = model(data, train_test_split_index=train_test_split_index)
+                    except RuntimeError as e:
+                        if "No available kernel" in str(e) or "math" in str(e).lower():
+                            if step == start_step:
+                                print("\n" + "!" * 80)
+                                print("CRITICAL WARNING: Flash/MemEfficient Attention failed to trigger!")
+                                print("PyTorch is falling back to the math backend. This will materialize the full")
+                                print("N^2 attention matrix and likely cause a massive OOM (e.g. 37+ GB allocated).")
+                                print("Error details:", str(e))
+                                print("!" * 80 + "\n")
+                            # Fallback to default behavior
+                            output = model(data, train_test_split_index=train_test_split_index)
+                        else:
+                            raise e
+                else:
+                    output = model(data, train_test_split_index=train_test_split_index)
+                targets = targets[:, train_test_split_index:]
 
-            loss = criterion(output, targets).mean()
+                targets = targets.reshape((-1,)).to(torch.long)
+                output = output.view(-1, output.shape[-1])
+
+                loss = criterion(output, targets).mean()
 
             if torch.isnan(loss):
                 print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
@@ -224,6 +280,11 @@ def train(
                     **scores,
                 }
                 eval_history.append(entry)
+                if metrics_file is not None:
+                    with open(metrics_file, "a") as f:
+                        import json
+
+                        f.write(json.dumps(entry) + "\n")
                 score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
 
@@ -233,6 +294,11 @@ def train(
             elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
                 entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, "param_count": param_count}
                 eval_history.append(entry)
+                if metrics_file is not None:
+                    with open(metrics_file, "a") as f:
+                        import json
+
+                        f.write(json.dumps(entry) + "\n")
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
 
             # save checkpoint
@@ -258,6 +324,9 @@ def train(
     if device.type == "cuda":
         peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
         print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+        if checkpoint_dir:
+            # checkpoint_dir is run_dir/checkpoints, so memory_stats.json lives alongside config.json
+            save_memory_stat(Path(checkpoint_dir).parent, "peak_vram_pretrain_gb", peak_mem_gb)
 
     if total_eval_time > 0:
         print(f"[NanoTabPFN] Total inline eval time: {total_eval_time:.1f}s")
@@ -285,7 +354,7 @@ class PriorDumpDataLoader(DataLoader):
         with h5py.File(self.filename, "r") as f:
             self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
 
-    def __iter__(self):  # pyright: ignore
+    def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""
         with h5py.File(self.filename, "r") as f:
             for _ in range(self.num_steps):
@@ -303,7 +372,7 @@ class PriorDumpDataLoader(DataLoader):
                     print("Finished iteration over all stored datasets!")
                     self.pointer = 0
 
-                yield dict(
+                yield PriorBatch(
                     x=x.to(self.device),
                     y=y.to(self.device),
                     train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
@@ -330,9 +399,9 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         self,
         num_steps: int,
         batch_size: int,
-        max_seq_len: int = 3000,
-        max_features: int = 45,
-        max_classes: int = 10,
+        max_seq_len: int = config.MAX_ROWS,
+        max_features: int = config.MAX_FEATURES,
+        max_classes: int = config.MAX_CLASSES,
         device: torch.device | None = None,
     ):
         """Initialize dataset."""
@@ -344,7 +413,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         self.max_classes = max_classes
         self.device = device if device is not None else get_default_device()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""
         import math
 
@@ -355,7 +424,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
         steps = self.num_steps if worker_info is None else math.ceil(self.num_steps / float(worker_info.num_workers))
 
         for _ in range(steps):
-            n_samples = np.random.randint(100, self.max_seq_len + 1)
+            n_samples = np.random.randint(min(100, self.max_seq_len), self.max_seq_len + 1)
             n_features = np.random.randint(2, self.max_features + 1)
             n_classes = np.random.randint(2, self.max_classes + 1)
 
@@ -376,7 +445,7 @@ class NanopriorDataset(torch.utils.data.IterableDataset):
             # 50% to 90% of samples used for training
             train_test_split_index = int(n_samples * np.random.uniform(0.5, 0.9))
 
-            yield dict(
+            yield PriorBatch(
                 x=x_batch.to(self.device),
                 y=y_batch.to(self.device),
                 train_test_split_index=train_test_split_index,

@@ -7,6 +7,14 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.nn import LayerNorm, MultiheadAttention
 
+try:
+    if torch.backends.mps.is_available():
+        from mps_flash_attn import replace_sdpa  # type: ignore
+
+        replace_sdpa()
+except ImportError:
+    pass
+
 
 class NanoTabPFNModel(nn.Module):
     """Core TabPFN Model."""
@@ -175,17 +183,20 @@ class TransformerEncoderLayer(nn.Module):
         src = src.transpose(1, 2)
         src = src.reshape(batch_size * col_size, rows_size, embedding_size)
         # training data attends to itself
+        train_src = src[:, :train_test_split_index].contiguous()
+        test_src = src[:, train_test_split_index:].contiguous()
+
         src_left = self.self_attention_between_datapoints(
-            src[:, :train_test_split_index],
-            src[:, :train_test_split_index],
-            src[:, :train_test_split_index],
+            train_src,
+            train_src,
+            train_src,
             need_weights=False,
         )[0]
         # test data attends to the training data
         src_right = self.self_attention_between_datapoints(
-            src[:, train_test_split_index:],
-            src[:, :train_test_split_index],
-            src[:, :train_test_split_index],
+            test_src,
+            train_src,
+            train_src,
             need_weights=False,
         )[0]
         src = torch.cat([src_left, src_right], dim=1) + src
@@ -202,8 +213,8 @@ def create_mlp(
     in_features: int, hidden_features: int, out_features: int, activation: str = "gelu", device=None, dtype=None
 ) -> nn.Module:
     """Factory function to create the appropriate MLP based on the activation type."""
-    activation_name = activation.lower()
-    if activation_name in ["swiglu", "geglu", "reglu"]:
+    activation_name = activation.lower().replace(" ", "_")
+    if activation_name in ["swiglu", "bilinear"]:
         return GatedMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
     return StandardMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
 
@@ -219,6 +230,8 @@ class StandardMLP(nn.Module):
         self.activation_name = activation
         self.linear1 = nn.Linear(in_features, hidden_features, device=device, dtype=dtype)
         self.linear2 = nn.Linear(hidden_features, out_features, device=device, dtype=dtype)
+        if self.activation_name == "prelu":
+            self.prelu = nn.PReLU(device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Applies the MLP and standard activation function."""
@@ -227,10 +240,12 @@ class StandardMLP(nn.Module):
             h = F.gelu(h)
         elif self.activation_name == "relu":
             h = F.relu(h)
-        elif self.activation_name in ["silu", "swish"]:
+        elif self.activation_name == "swish":
             h = F.silu(h)
-        elif self.activation_name == "mish":
-            h = F.mish(h)
+        elif self.activation_name == "leaky_relu":
+            h = F.leaky_relu(h)
+        elif self.activation_name == "prelu":
+            h = self.prelu(h)
         else:
             raise ValueError(f"Unsupported standard activation: {self.activation_name}")
         return self.linear2(h)
@@ -262,10 +277,8 @@ class GatedMLP(nn.Module):
         up = self.linear_up(x)
         if self.activation_name == "swiglu":
             gate = F.silu(gate)
-        elif self.activation_name == "geglu":
-            gate = F.gelu(gate)
-        elif self.activation_name == "reglu":
-            gate = F.relu(gate)
+        elif self.activation_name == "bilinear":
+            pass
         else:
             raise ValueError(f"Unsupported gated activation: {self.activation_name}")
         return self.linear_down(gate * up)
@@ -322,27 +335,17 @@ class NanoTabPFNClassifier:
         Cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities.
         """
-        # Determine limits based on feature count to avoid quadratic memory OOM in attention
+        # Determine sequence length limits for subsampling / chunking.
+        # With Flash / Memory-Efficient Attention the full N² matrix is never
+        # materialised, so there is no quadratic memory constraint.  We use a
+        # simple explicit limit instead.  10 000 comfortably covers the largest
+        # nanotabpfn dataset (8 456 train rows).  Datasets exceeding this have
+        # their training context subsampled and test data chunked (lossless).
         if self.max_train_samples is not None and self.max_total_samples is not None:
             max_train_samples = self.max_train_samples
             max_total_samples = self.max_total_samples
         else:
-            num_features = self.X_train.shape[1]
-            col_size = num_features + 1
-            num_heads = 4
-            if len(self.model.transformer_blocks) > 0:
-                num_heads = self.model.transformer_blocks[0].self_attention_between_datapoints.num_heads  # pyright: ignore[reportAttributeAccessIssue]
-
-            # Target peak memory of 30.0 GiB for the attention weights tensor.
-            # The actual peak is ~2x this (scores + softmax output coexist briefly),
-            # so this targets ~60 GiB peak — perfect for 80+ GB GPUs like the A100.
-            # Memory per attention = col_size * num_heads * (seq_len ** 2) * 4 bytes
-            max_attn_bytes = 30.0 * (1024**3)
-            max_seq_len = int(np.sqrt(max_attn_bytes / (col_size * num_heads * 4)))
-
-            # Clip max_seq_len to a reasonable range [1000, 10000]
-            max_seq_len = max(1000, min(10000, max_seq_len))
-
+            max_seq_len = 10_000
             max_train_samples = max_seq_len
             max_total_samples = int(max_seq_len * 1.25)
 
