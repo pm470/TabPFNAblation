@@ -1,6 +1,7 @@
 """Training loops and data loading."""
 
 import contextlib
+import hashlib
 import os
 import random
 import time
@@ -334,6 +335,23 @@ def train(
     return model, eval_history
 
 
+def _seed_to_offset(seed: int, dataset_size: int) -> int:
+    """Compute a deterministic starting offset from a seed.
+
+    Uses SHA-256 hashing to distribute seeds uniformly across the dataset,
+    avoiding the clustering that simple modulo would cause with consecutive seeds.
+
+    Args:
+        seed: The random seed.
+        dataset_size: Total number of samples in the HDF5 dataset.
+
+    Returns:
+        A starting index in [0, dataset_size).
+    """
+    h = hashlib.sha256(f"priordump-offset-{seed}".encode()).hexdigest()
+    return int(h, 16) % dataset_size
+
+
 class PriorDumpDataLoader(DataLoader):
     """DataLoader that loads synthetic prior data from an HDF5 dump.
 
@@ -342,17 +360,39 @@ class PriorDumpDataLoader(DataLoader):
         num_steps (int): Number of batches per epoch.
         batch_size (int): Batch size.
         device (torch.device): Device to load tensors onto.
+        seed (int | None): Random seed for deterministic starting offset.
+            When provided, the loader starts reading from a seed-dependent
+            position in the dataset instead of index 0. This ensures
+            different seeds train on different data slices.
+        skip_steps (int): Number of already-consumed steps to skip past.
+            Used for auto-resume: advances the pointer by
+            ``skip_steps * batch_size`` so the resumed run continues
+            where the previous run left off in the data sequence.
     """
 
-    def __init__(self, filename: str, num_steps: int, batch_size: int, device: torch.device | None = None):
+    def __init__(
+        self,
+        filename: str,
+        num_steps: int,
+        batch_size: int,
+        device: torch.device | None = None,
+        seed: int | None = None,
+        skip_steps: int = 0,
+    ):
         """Initialize loader."""
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
         self.device = device if device is not None else get_default_device()
-        self.pointer = 0
         with h5py.File(self.filename, "r") as f:
             self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
+            dataset_size = f["X"].shape[0]  # pyright: ignore
+        if seed is not None:
+            self.pointer = _seed_to_offset(seed, dataset_size)
+        else:
+            self.pointer = 0
+        if skip_steps:
+            self.pointer = (self.pointer + skip_steps * batch_size) % dataset_size
 
     def __iter__(self) -> Iterator[PriorBatch]:
         """Yield batches."""

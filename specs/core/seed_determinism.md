@@ -36,6 +36,10 @@ As a researcher, I want full control over random seeds so that experiments are e
 - [x] AC-15: Two forward passes on identical input, with the model constructed under the same seed, produce identical output tensors.
 - [x] AC-16: Two forward passes on identical input, with the model constructed under different seeds, produce different output tensors.
 
+### PriorDumpDataLoader Data Diversity
+
+- [x] AC-15: `PriorDumpDataLoader` with different seeds reads different data slices from the HDF5 file, ensuring that the only shared variance source is not limited to weight initialization.
+
 ## Notes
 
 - The determinism tests (`test_seed_determinism.py`) validate AC-7 and AC-8 by running short experiments (10 steps, eval every 5) and comparing the recorded loss values from `metrics.jsonl`.

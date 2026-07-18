@@ -91,6 +91,7 @@ def run_training(args):
         num_steps=args.num_steps,
         batch_size=args.batch_size,
         device=device,
+        seed=args.seed,
     )
 
     # Train
