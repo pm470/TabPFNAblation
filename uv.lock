@@ -1333,6 +1333,12 @@ dev = [
     { name = "ruff", marker = "sys_platform == 'linux'" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest", marker = "sys_platform == 'linux'" },
+    { name = "pytest-cov", marker = "sys_platform == 'linux'" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "autogluon-tabular", specifier = "==1.5.1b20260626" },
@@ -1350,6 +1356,12 @@ requires-dist = [
     { name = "torch", specifier = "==2.11.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+]
 
 [[package]]
 name = "threadpoolctl"

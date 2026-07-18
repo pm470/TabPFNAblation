@@ -55,7 +55,7 @@ def test_significance_identical_scores_not_significant():
 
 def test_significance_detects_consistent_improvement():
     baseline = {f"task_{i}": 0.5 + 0.01 * i for i in range(10)}
-    variant = {task_id: score + 0.1 for task_id, score in baseline.items()}
+    variant = {task_id: score + 0.1 + (0.001 * i) for i, (task_id, score) in enumerate(baseline.items())}
     result = paired_significance_test(baseline, variant)
     assert result["significant"] is True
     assert result["p_value"] < 0.05

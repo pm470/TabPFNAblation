@@ -77,11 +77,11 @@ def compute_relative_improvement(
     improvements = {}
     for task_id in common_tasks:
         base_score = baseline[task_id]
-        
+
         if base_score == 0.0:
-                improvements[task_id] = float('nan')
-                continue
-                
+            improvements[task_id] = float("nan")
+            continue
+
         variant_score = variant[task_id]
         diff = (variant_score - base_score) if higher_is_better else (base_score - variant_score)
         improvements[task_id] = diff / abs(base_score)
