@@ -25,9 +25,7 @@ def run_training(seed):
         max_classes=2,
         device=torch.device("cpu"),
     )
-    from torch.utils.data import DataLoader
-
-    prior_loader = DataLoader(prior, batch_size=None, num_workers=0)
+    prior_loader = DataLoader(prior_dataset, batch_size=None, num_workers=0)
     trained_model, _ = train(
         model,
         prior_loader,
