@@ -156,7 +156,8 @@ def train(
     checkpoint_every_minutes: float | None = None,
     start_step: int = 0,
     autocast_dtype: torch.dtype | None = torch.bfloat16,
-):
+    metrics_file: str | Path | None = None,
+) -> tuple[NanoTabPFNModel, list[dict]]:
     """Trains our model on the given prior using the given criterion.
 
     Args:
@@ -173,6 +174,7 @@ def train(
         start_step: (int) the starting step to offset logging when resuming
         autocast_dtype: (torch.dtype|None) dtype for torch.autocast during forward/loss.
                         Default torch.bfloat16 enables FlashAttention. None disables autocast.
+        metrics_file: (str|Path|None) path to a JSONL file to stream evaluation metrics dynamically.
 
     Returns:
         (model) our trained numpy model
@@ -219,7 +221,28 @@ def train(
             targets = full_data["y"].to(device)
 
             with amp_context():
-                output = model(data, train_test_split_index=train_test_split_index)
+                # On CUDA, enforce Flash/MemEfficient Attention to prevent silent math backend fallback OOMs.
+                if device.type == "cuda":
+                    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+                    try:
+                        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
+                            output = model(data, train_test_split_index=train_test_split_index)
+                    except RuntimeError as e:
+                        if "No available kernel" in str(e) or "math" in str(e).lower():
+                            if step == start_step:
+                                print("\n" + "!" * 80)
+                                print("CRITICAL WARNING: Flash/MemEfficient Attention failed to trigger!")
+                                print("PyTorch is falling back to the math backend. This will materialize the full")
+                                print("N^2 attention matrix and likely cause a massive OOM (e.g. 37+ GB allocated).")
+                                print("Error details:", str(e))
+                                print("!" * 80 + "\n")
+                            # Fallback to default behavior
+                            output = model(data, train_test_split_index=train_test_split_index)
+                        else:
+                            raise e
+                else:
+                    output = model(data, train_test_split_index=train_test_split_index)
                 targets = targets[:, train_test_split_index:]
 
                 targets = targets.reshape((-1,)).to(torch.long)
@@ -257,6 +280,11 @@ def train(
                     **scores,
                 }
                 eval_history.append(entry)
+                if metrics_file is not None:
+                    with open(metrics_file, "a") as f:
+                        import json
+
+                        f.write(json.dumps(entry) + "\n")
                 score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
 
@@ -266,6 +294,11 @@ def train(
             elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
                 entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, "param_count": param_count}
                 eval_history.append(entry)
+                if metrics_file is not None:
+                    with open(metrics_file, "a") as f:
+                        import json
+
+                        f.write(json.dumps(entry) + "\n")
                 print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
 
             # save checkpoint

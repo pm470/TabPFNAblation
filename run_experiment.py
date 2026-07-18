@@ -149,6 +149,9 @@ def run_experiment(args):
         # Using 0 workers for safety/compatibility; increase if CPU allows.
         prior = DataLoader(dataset, batch_size=None, num_workers=0)
 
+    # Setup metrics file
+    metrics_path = run_dir / "metrics.jsonl"
+
     # Train
     model, eval_history = train(
         model,
@@ -161,16 +164,10 @@ def run_experiment(args):
         checkpoint_every=args.checkpoint_every,
         start_step=start_step,
         autocast_dtype=autocast_dtype,
+        metrics_file=metrics_path,
     )
 
-    # Save metrics as JSONL
-    metrics_path = run_dir / "metrics.jsonl"
-    mode = "a" if start_step > 0 else "w"
-    with open(metrics_path, mode) as f:
-        for entry in eval_history:
-            f.write(json.dumps(entry) + "\n")
-    print(f"\nMetrics saved to {metrics_path}")
-    print(f"Checkpoints saved to {checkpoint_dir}")
+    print(f"\nTraining completed. Checkpoints saved to {checkpoint_dir}")
 
     # Final evaluation
     model.eval()

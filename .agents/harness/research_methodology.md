@@ -8,18 +8,21 @@
 
 ## Frozen Hyperparameters
 
-When comparing activation functions, **ONLY the activation changes**. Everything else stays at defaults:
+When comparing activation functions, **ONLY the activation changes**. Everything else stays at:
 
-| Parameter | Value |
-|---|---|
-| Embedding dim | 96 |
-| Attention heads | 3 |
-| MLP hidden dim | 192 |
-| Transformer layers | 3 |
-| Output classes | 2 |
-| Learning rate | 4e-3 |
-| Batch size | 32 |
-| Training steps | 5000 |
+### Default Model Parameters (NanoTabPFN)
+- **Embedding Size:** 128
+- **Attention Heads:** 4
+- **MLP Hidden:** 192
+- **Layers:** 3
+- **Outputs:** 10
+
+### Default Training Parameters
+- **Steps:** 5,000
+- **Batch Size:** 8
+- **Learning Rate:** 1e-3
+- **Checkpointing:** Every 250 steps
+- **Fast Evaluation:** Every 250 steps (3 proxy datasets)
 
 Changing any of these invalidates the comparison unless explicitly studying that axis (e.g., depth ablation in phase 5).
 
