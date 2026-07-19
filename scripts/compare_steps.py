@@ -18,19 +18,19 @@ import pandas as pd
 def main():
     """Run the comparison script."""
     import sys
+
     sys.path.append(str(Path(__file__).parent.parent / "src"))
     from nanotabpfn.utils import load_env
+
     load_env()
 
     parser = argparse.ArgumentParser(description="Compare GELU and SwiGLU across all steps.")
-    
+
     default_results = "/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn_data/results"
     if "WORKSPACE_DIR" in os.environ:
         default_results = str(Path(os.environ["WORKSPACE_DIR"]) / "results")
 
-    parser.add_argument(
-        "--results_dir", type=str, default=default_results
-    )
+    parser.add_argument("--results_dir", type=str, default=default_results)
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)

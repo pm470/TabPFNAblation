@@ -389,6 +389,7 @@ class PriorDumpDataLoader(DataLoader):
             dataset_size = f["X"].shape[0]  # pyright: ignore
         if seed is not None:
             self.pointer = _seed_to_offset(seed, dataset_size)
+            self.pointer -= self.pointer % self.batch_size
         else:
             self.pointer = 0
         if skip_steps:

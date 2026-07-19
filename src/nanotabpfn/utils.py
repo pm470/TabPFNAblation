@@ -23,6 +23,7 @@ def save_memory_stat(run_dir: Path, key: str, value: float | dict) -> None:
 def load_env(env_path: str | Path = ".env") -> None:
     """Load environment variables from a .env file."""
     import os
+
     env_file = Path(env_path)
     if env_file.exists():
         with open(env_file) as f:

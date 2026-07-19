@@ -3,7 +3,7 @@ id: CORE-002
 title: "Training Pipeline"
 status: implemented
 module: train.py
-last_synced: 2026-07-18
+last_synced: 2026-07-19
 ---
 
 # Training Pipeline
@@ -54,7 +54,7 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 ### PriorDumpDataLoader
 
 - [x] AC-31: `PriorDumpDataLoader.__init__` accepts an optional `seed` parameter (default `None`).
-- [x] AC-32: When `seed` is provided, the initial `self.pointer` is set to a deterministic offset computed via SHA-256 hash of the seed, uniformly distributed across `[0, dataset_size)`.
+- [x] AC-32: When `seed` is provided, the initial `self.pointer` is set to a deterministic offset computed via SHA-256 hash of the seed, uniformly distributed across `[0, dataset_size)`, and then aligned to a multiple of `batch_size`.
 - [x] AC-33: When `seed` is `None`, the initial `self.pointer` is `0` (backward-compatible default).
 - [x] AC-34: Two instances with the same `seed` and same HDF5 file always produce the same initial pointer.
 - [x] AC-35: Two instances with different seeds produce different initial pointers (with overwhelming probability for reasonably sized datasets).

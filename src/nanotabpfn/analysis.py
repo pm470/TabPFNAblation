@@ -16,7 +16,9 @@ METRICS = {
 }
 
 
-def load_tabarena_scores(results_dir: Path | str, activation: str, metric: str, split: str = "all") -> dict[str, list[float]]:
+def load_tabarena_scores(
+    results_dir: Path | str, activation: str, metric: str, split: str = "all"
+) -> dict[str, list[float]]:
     """Load per-dataset scores for one activation across all its seed runs.
 
     Args:

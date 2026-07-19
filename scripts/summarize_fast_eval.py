@@ -22,12 +22,14 @@ import seaborn as sns
 def main():
     """Run the summarization and plotting script."""
     import sys
+
     sys.path.append(str(Path(__file__).parent.parent / "src"))
     from nanotabpfn.utils import load_env
+
     load_env()
 
     parser = argparse.ArgumentParser(description="Summarize and plot fast evaluation metrics.")
-    
+
     default_results = "/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn_data/results"
     if "WORKSPACE_DIR" in os.environ:
         default_results = str(Path(os.environ["WORKSPACE_DIR"]) / "results")

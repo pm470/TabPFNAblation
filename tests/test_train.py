@@ -129,6 +129,27 @@ def test_prior_dump_dataloader_seed_offset(tmp_path):
     assert loader_none.pointer == 0
 
 
+def test_prior_dump_dataloader_seed_alignment(tmp_path):
+    """PriorDumpDataLoader aligns seed offsets to batch size."""
+    h5_path = tmp_path / "tiny_prior.h5"
+    num_samples = 100
+
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("max_num_classes", data=[2])
+        f.create_dataset("X", data=np.random.randn(num_samples, 10, 5).astype(np.float32))
+        f.create_dataset("y", data=np.random.randint(0, 2, (num_samples, 10)).astype(np.float32))
+        f.create_dataset("num_features", data=np.full(num_samples, 5, dtype=np.int32))
+        f.create_dataset("num_datapoints", data=np.full(num_samples, 10, dtype=np.int32))
+        f.create_dataset("single_eval_pos", data=np.full(num_samples, 5, dtype=np.int32))
+
+    # Test with multiple random seeds to ensure alignment holds
+    for seed in range(5):
+        loader = PriorDumpDataLoader(
+            filename=str(h5_path), num_steps=1, batch_size=8, device=torch.device("cpu"), seed=seed
+        )
+        assert loader.pointer % 8 == 0, f"Pointer {loader.pointer} not aligned to batch size 8 for seed {seed}"
+
+
 def test_prior_dump_dataloader_seed_determinism(tmp_path):
     """PriorDumpDataLoader with the same seed always starts at the same offset."""
     h5_path = tmp_path / "tiny_prior.h5"
