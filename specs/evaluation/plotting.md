@@ -2,15 +2,15 @@
 id: EVAL-003
 title: "Results Plotting"
 status: implemented
-module: plot_results.py
-last_synced: 2026-06-25
+module: plot_results.py, generate_mock_data.py
+last_synced: 2026-07-15
 ---
 
 # Results Plotting
 
 ## User Story
 
-As a researcher, I want to visualize training curves and final evaluation metrics across activation functions and seeds so that I can compare performance and identify the best-performing variants.
+As a researcher, I want to visualize training curves and final evaluation metrics across activation functions and seeds so that I can compare performance and identify the best-performing variants. I also want to generate the issue #9 evaluation plots (bar chart, learning curves, depth/width scaling) with mock data support and poster-ready output formats.
 
 ## Acceptance Criteria
 
@@ -25,40 +25,65 @@ As a researcher, I want to visualize training curves and final evaluation metric
 - [x] AC-7: Returns a dict mapping activation name → list of seed runs, where each seed run is a list of metric dicts.
 - [x] AC-8: Skips activation directories that have no valid seed runs with metrics.
 
-### plot_training_curves()
 
-- [x] AC-9: Creates a single figure with size `(10, 6)`.
-- [x] AC-10: Plots training step vs. ROC-AUC for each activation function.
-- [x] AC-11: Assumes all seeds within an activation have the same step sequence (takes steps from the first seed run).
-- [x] AC-12: Computes mean and standard deviation of `roc_auc` across seeds using `np.mean` and `np.std` along axis=0.
-- [x] AC-13: Plots the mean line with a label of format `"{activation_name} (n={num_seeds})"`.
-- [x] AC-14: Renders ±1 std shaded bands using `ax.fill_between` with `alpha=0.2`.
-- [x] AC-15: Uses `float("nan")` as fallback if `roc_auc` key is missing from an entry.
-- [x] AC-16: Axes labels are "Training Step" (x) and "ROC-AUC" (y).
-- [x] AC-17: Title is "Training Curves: ROC-AUC vs. Step".
-- [x] AC-18: Saves to the specified `output_path` (default `"training_curves.png"`) at 150 DPI.
-- [x] AC-19: Calls `plt.close(fig)` after saving to free memory.
-
-### plot_final_boxplot()
-
-- [x] AC-20: Creates a box-and-whisker plot of final ROC-AUC values per activation function.
-- [x] AC-21: Final ROC-AUC is taken from the last entry (`run[-1]`) of each seed run.
-- [x] AC-22: Figure width scales with the number of activations: `max(6, len(labels) * 1.5)`, height is 6.
-- [x] AC-23: Uses `ax.boxplot` with `patch_artist=True` for colored boxes.
-- [x] AC-24: Box colors are from `seaborn.color_palette("husl", len(labels))` with `alpha=0.7`.
-- [x] AC-25: Axes labels are "Activation Function" (x) and "Final ROC-AUC" (y).
-- [x] AC-26: Title is "Final ROC-AUC by Activation Function".
-- [x] AC-27: Saves to the specified `output_path` (default `"final_boxplot.png"`) at 150 DPI.
-- [x] AC-28: Calls `plt.close(fig)` after saving.
 
 ### Main Script
 
 - [x] AC-29: When run as `__main__`, calls `load_all_results()` with default arguments.
 - [x] AC-30: Prints discovered activations and seed counts before plotting.
-- [x] AC-31: Calls both `plot_training_curves` and `plot_final_boxplot` sequentially.
+
+### generate_mock_data.py
+
+- [ ] AC-32: Generates mock results into `results_mock/` directory with 7 activations × 10 seeds.
+- [ ] AC-33: Each seed directory contains `metrics.jsonl` and `config.json`.
+- [ ] AC-34: Learning curves follow exponential saturation with per-seed offsets and per-step noise.
+- [ ] AC-35: Generates `architecture_ablation.json` with depth and width scaling data for GELU, SwiGLU, Bilinear.
+- [ ] AC-36: Uses fixed numpy random seed (42) for reproducibility.
+
+### plot_bar_chart_with_error_bars()
+
+- [ ] AC-37: Bar chart of Normalized ROC-AUC per activation with mean ± std error bars.
+- [ ] AC-38: Bars sorted by descending mean performance.
+- [ ] AC-39: GELU baseline is rendered as a standard bar AND a dashed horizontal reference line (in front of the bars) matching the bar's color.
+- [ ] AC-40: Saves to `{output_dir}/bar_chart_roc_auc.{png,svg}` at 300 DPI.
+
+### plot_learning_curves_best()
+
+- [ ] AC-41: Learning curve of pre-training steps vs. Normalized ROC-AUC.
+- [ ] AC-42: Shows GELU baseline + top-2 best-performing activations (by final mean ROC-AUC).
+- [ ] AC-43: Renders ±1 std shaded uncertainty bands across seeds.
+- [ ] AC-44: Saves to `{output_dir}/learning_curves_best.{png,svg}` at 300 DPI.
+
+### plot_depth_scaling()
+
+- [ ] AC-45: Line plot of number of transformer layers (x-axis, integer) vs. Normalized ROC-AUC (y-axis).
+- [ ] AC-46: Shows GELU + top-2 variants with uncertainty bands.
+- [ ] AC-47: Saves to `{output_dir}/depth_scaling.{png,svg}` at 300 DPI.
+
+### plot_width_scaling()
+
+- [ ] AC-48: Line plot of FFN hidden dim (x-axis, log scale) vs. Normalized ROC-AUC (y-axis).
+- [ ] AC-49: Shows GELU + top-2 variants with uncertainty bands.
+- [ ] AC-50: Saves to `{output_dir}/width_scaling.{png,svg}` at 300 DPI.
+
+### Mock Data Watermark
+
+- [ ] AC-51: All plot functions accept an `is_mock: bool` parameter (default `False`).
+- [ ] AC-52: When `is_mock=True`, a diagonal watermark text "MOCK DATA — NOT FROM REAL EXPERIMENTS" is rendered across the plot.
+- [ ] AC-53: Watermark uses semi-transparent red text that doesn't obscure the data and is oriented negatively.
+
+### CLI Interface
+
+- [ ] AC-54: `--mock` flag switches data source to `results_mock/`.
+- [ ] AC-55: `--output-dir` flag controls plot output directory (default `plots`).
+- [ ] AC-56: When `--mock` is passed, all 6 plots are generated with watermarks.
+- [ ] AC-57: Plots are saved as both PNG (300 DPI) and SVG for poster presentations.
 
 ## Notes
 
 - Depends on `matplotlib` and `seaborn` for plotting.
 - The script expects the `results/` directory structure produced by `run_experiment.py`: `results/{activation}/seed_{N}/metrics.jsonl`.
 - Grid is enabled on plots with `alpha=0.3`; the box plot grid is y-axis only.
+- Issue #9 plots use mock data when `--mock` is passed; all mock plots include a watermark.
+- Architecture ablation data is loaded from `results_mock/architecture_ablation.json`.
+- Output formats: PNG (300 DPI) + SVG for poster presentations.
