@@ -232,7 +232,11 @@ def plot_bar_chart_with_error_bars(
     ax.set_xlabel("Activation Function", fontsize=12)
     ax.set_ylabel("ROC-AUC", fontsize=12)
     ax.set_title("ROC-AUC by Activation Function", fontsize=14)
-    ax.set_ylim(bottom=0.5)
+    y_min = min(m - s for m, s in zip(means, stds))
+    y_max = max(m + s for m, s in zip(means, stds))
+    y_range = y_max - y_min
+    # Add 50% padding at the bottom, 80% at the top (to fit text labels)
+    ax.set_ylim(bottom=max(0.5, y_min - y_range * 0.5), top=min(1.0, y_max + y_range * 0.8))
     ax.grid(True, alpha=0.3, axis="y")
 
     # Add value labels on bars
