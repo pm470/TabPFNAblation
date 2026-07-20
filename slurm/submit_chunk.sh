@@ -48,7 +48,7 @@ for act in "${ACTIVATIONS[@]}"; do
       TRAIN_SEEDS="${TRAIN_SEEDS}${TRAIN_SEEDS:+,}${seed}"
     fi
     # Check if benchmarking is completed
-    if [ ! -f "${RESULTS_DIR}/${act}/seed_${seed}/tabarena_exp/nanotabpfn_summary.csv" ]; then
+    if [ ! -f "${RESULTS_DIR}/${act}/seed_${seed}/benchmark_final/tabarena_exp/nanotabpfn_summary.csv" ]; then
       BENCH_SEEDS="${BENCH_SEEDS}${BENCH_SEEDS:+,}${seed}"
     fi
   done

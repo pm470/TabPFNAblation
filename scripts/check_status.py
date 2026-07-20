@@ -25,21 +25,24 @@ EXPECTED_STEPS = 5000
 
 
 def parse_args():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Check the completion status of experiments.")
     parser.add_argument("--results-dir", type=str, default=None, help="Base results directory")
     return parser.parse_args()
 
 
 def main():
+    """Run the status check logic."""
     args = parse_args()
-    
+
     # Try to load workspace dir from .env
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except ImportError:
         pass
-        
+
     if args.results_dir:
         results_dir = Path(args.results_dir)
     else:
@@ -63,20 +66,20 @@ def main():
 
     missing_training = []
     missing_tabarena = []
-    
+
     for act in activations:
         act_dir = results_dir / act
         for seed in EXPECTED_SEEDS:
             seed_dir = act_dir / f"seed_{seed}"
             seed_name = f"{act}/seed_{seed}"
-            
+
             # Check training (metrics.jsonl)
             metrics_file = seed_dir / "metrics.jsonl"
             training_complete = False
             if metrics_file.exists():
                 try:
                     # check last line
-                    with open(metrics_file, "r") as f:
+                    with open(metrics_file) as f:
                         lines = [line.strip() for line in f if line.strip()]
                         if lines:
                             last_metric = json.loads(lines[-1])
@@ -84,10 +87,10 @@ def main():
                                 training_complete = True
                 except Exception:
                     pass
-            
+
             if not training_complete:
                 missing_training.append(seed_name)
-                
+
             # Check TabArena
             tabarena_file = seed_dir / "benchmark_final" / "tabarena_exp" / "nanotabpfn_summary.csv"
             if not tabarena_file.exists():
@@ -100,7 +103,7 @@ def main():
     else:
         for m in missing_training:
             print(f"  ❌ {m}")
-            
+
     print("\n=== TabArena Status (Missing nanotabpfn_summary.csv) ===")
     if not missing_tabarena:
         print("  ✅ All TabArena evaluations completed!")
@@ -109,6 +112,7 @@ def main():
             print(f"  ❌ {m}")
 
     print("\nDone.")
+
 
 if __name__ == "__main__":
     main()

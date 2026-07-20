@@ -106,6 +106,7 @@ def paired_significance_test(baseline: dict[str, float], variant: dict[str, floa
     Args:
         baseline: Mapping of `task_id` to baseline score.
         variant: Mapping of `task_id` to variant score.
+        higher_is_better: Whether higher scores represent better performance.
 
     Returns:
         Dict with `t_statistic`, `p_value`, `significant` (p < 0.05), and

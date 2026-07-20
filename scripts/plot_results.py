@@ -143,6 +143,7 @@ def load_all_results(results_dir: str = "results") -> dict[str, list[list[dict]]
                 if tabarena_csv.exists():
                     try:
                         import pandas as pd
+
                         df = pd.read_csv(tabarena_csv)
                         if "roc_auc" in df.columns:
                             metrics[-1]["tabarena_roc_auc"] = float(df["roc_auc"].mean())
@@ -166,10 +167,10 @@ def plot_bar_chart_with_error_bars(
     is_mock: bool = False,
 ) -> None:
     """Bar chart of ROC-AUC per activation with error bars.
-    
+
     Bars are sorted by descending mean performance. The GELU baseline
     is plotted as a horizontal reference line with a shaded uncertainty band.
-    
+
     Args:
         all_results: Dict mapping activation name → list of seed runs.
         output_dir: Directory for output files.
@@ -232,8 +233,8 @@ def plot_bar_chart_with_error_bars(
     ax.set_xlabel("Activation Function", fontsize=12)
     ax.set_ylabel("ROC-AUC", fontsize=12)
     ax.set_title("ROC-AUC by Activation Function", fontsize=14)
-    y_min = min(m - s for m, s in zip(means, stds))
-    y_max = max(m + s for m, s in zip(means, stds))
+    y_min = min(m - s for m, s in zip(means, stds, strict=False))
+    y_max = max(m + s for m, s in zip(means, stds, strict=False))
     y_range = y_max - y_min
     # Add 50% padding at the bottom, 80% at the top (to fit text labels)
     ax.set_ylim(bottom=max(0.5, y_min - y_range * 0.5), top=min(1.0, y_max + y_range * 0.8))
@@ -449,10 +450,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: load data and generate all plots."""
     args = parse_args()
-    
+
     import os
+
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except ImportError:
         pass

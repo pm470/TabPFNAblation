@@ -48,7 +48,7 @@ def test_relative_improvement_only_uses_common_tasks():
 def test_significance_identical_scores_not_significant():
     baseline = {f"task_{i}": 0.7 for i in range(10)}
     variant = dict(baseline)
-    result = paired_significance_test(baseline, variant)
+    result = paired_significance_test(baseline, variant, higher_is_better=True)
     assert result["significant"] is False
     assert result["n_datasets"] == 10
 
@@ -56,7 +56,7 @@ def test_significance_identical_scores_not_significant():
 def test_significance_detects_consistent_improvement():
     baseline = {f"task_{i}": 0.5 + 0.01 * i for i in range(10)}
     variant = {task_id: score + 0.1 + (0.001 * i) for i, (task_id, score) in enumerate(baseline.items())}
-    result = paired_significance_test(baseline, variant)
+    result = paired_significance_test(baseline, variant, higher_is_better=True)
     assert result["significant"] is True
     assert result["p_value"] < 0.05
     assert result["n_datasets"] == 10
@@ -66,14 +66,14 @@ def test_significance_noisy_tiny_improvement_not_significant():
     """A small, inconsistent difference across few datasets should not reach significance."""
     baseline = {"task_a": 0.70, "task_b": 0.55, "task_c": 0.62}
     variant = {"task_a": 0.71, "task_b": 0.54, "task_c": 0.63}
-    result = paired_significance_test(baseline, variant)
+    result = paired_significance_test(baseline, variant, higher_is_better=True)
     assert result["significant"] is False
 
 
 def test_significance_requires_at_least_two_common_datasets():
     baseline = {"task_a": 0.5}
     variant = {"task_a": 0.6}
-    result = paired_significance_test(baseline, variant)
+    result = paired_significance_test(baseline, variant, higher_is_better=True)
     assert result["n_datasets"] == 1
     assert result["significant"] is False
     assert result["p_value"] != result["p_value"]  # NaN

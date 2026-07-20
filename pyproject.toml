@@ -20,6 +20,7 @@ dependencies = [
     "matplotlib>=3.8",
     "autogluon-tabular==1.5.1b20260626",
     "tabarena @ git+https://github.com/autogluon/tabarena.git@bdc1c82ee468f111a8100bc0f57767fb0150c980#subdirectory=packages/tabarena",
+    "python-dotenv>=1.2.2",
 ]
 
 [project.optional-dependencies]
