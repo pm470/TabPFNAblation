@@ -4,6 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
+
+from nanotabpfn import config
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import (
     PriorDumpDataLoader,
@@ -17,11 +20,11 @@ def parse_args(argv=None):
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Train a single ablation model")
     parser.add_argument("--activation", type=str, default="gelu", help="Activation function name")
-    parser.add_argument("--data_file", type=str, default="300k_150x5_2.h5", help="Path to HDF5 prior data dump")
+    parser.add_argument("--data_file", type=str, default="50k_10000x120_10.h5", help="Path to HDF5 prior data dump")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--num_steps", type=int, default=2500, help="Number of training steps")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument("--lr", type=float, default=4e-3, help="Learning rate")
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--eval_every", type=int, default=25, help="Evaluate every N steps")
     parser.add_argument("--checkpoint_every", type=int, default=250, help="Save checkpoint every N steps")
     parser.add_argument("--checkpoint_every_minutes", type=float, default=10.0, help="Save checkpoint every N minutes")
@@ -30,7 +33,8 @@ def parse_args(argv=None):
     parser.add_argument("--num_attention_heads", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
-    parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
+    parser.add_argument("--num_outputs", type=int, default=config.MAX_CLASSES, help="Number of output classes")
+    parser.add_argument("--no-autocast", action="store_true", help="Disable bfloat16 autocast (use pure float32)")
     return parser.parse_args(argv)
 
 
@@ -53,6 +57,8 @@ def run_training(args):
     )
 
     param_count = sum(p.numel() for p in model.parameters())
+    autocast_dtype = None if args.no_autocast else torch.bfloat16
+
     config = {
         "activation": args.activation,
         "data_file": args.data_file,
@@ -70,6 +76,7 @@ def run_training(args):
         "num_outputs": args.num_outputs,
         "param_count": param_count,
         "device": str(device),
+        "autocast_dtype": str(autocast_dtype) if autocast_dtype else None,
     }
 
     config_path = run_dir / "config.json"
@@ -84,6 +91,7 @@ def run_training(args):
         num_steps=args.num_steps,
         batch_size=args.batch_size,
         device=device,
+        seed=args.seed,
     )
 
     # Train
@@ -97,6 +105,7 @@ def run_training(args):
         checkpoint_dir=str(checkpoint_dir),
         checkpoint_every=args.checkpoint_every,
         checkpoint_every_minutes=args.checkpoint_every_minutes,
+        autocast_dtype=autocast_dtype,
     )
 
     metrics_path = run_dir / "metrics.jsonl"

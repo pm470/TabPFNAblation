@@ -3,7 +3,7 @@ id: EVAL-002
 title: "TabArena Evaluation"
 status: implemented
 module: tabarena_eval.py
-last_synced: 2026-07-06
+last_synced: 2026-07-11
 ---
 
 # TabArena Evaluation
@@ -37,13 +37,15 @@ As a researcher, I want to evaluate my trained model on the TabArena benchmark s
 - [x] AC-13: Creates a `TabArenaV0pt1ExperimentBundle` with a single model entry (the `TabArenaNanoTabPFNModel` config generator at index 0) and sets `verbosity=0` and `model_verbosity=0` to reduce AutoGluon's fold-level logging noise.
 - [x] AC-14: Uses `TabArenaContext` to build and run evaluation jobs.
 - [x] AC-15: Results directory is `run_dir / "tabarena_exp"`.
-- [x] AC-16: Uses the `subset` parameter in `build_and_run_jobs` (defaults to `"classification"`).
+- [x] AC-16: Uses the `subset` parameter in `build_and_run_jobs` (defaults to `"nanotabpfn"`).
 - [x] AC-17: Runs with `debug_mode=True` (required for the global variable sharing pattern).
 - [x] AC-18: Sets `new_result_prefix="[New] "` for result labeling.
-- [x] AC-18.1: Defines a `SubsetPredicate` for "nanotabpfn" requiring `max_train_rows <= 3000`, `n_features <= 45`, and `0 < n_classes <= 10`.
+- [x] AC-18.1: Defines a `SubsetPredicate` for "nanotabpfn" that combines TabArena's official "tabpfn" subset with a classification-only filter (`n_classes > 0`).
 - [x] AC-18.2: Bypasses TabArena's `context.compare()` and instead manually parses the `list[dict]` returned by `build_and_run_jobs`.
 - [x] AC-18.3: Computes metrics (ROC-AUC and Log Loss) natively via `sklearn.metrics` directly from the raw test probabilities (`pred_proba_dict_test`) and labels (`y_test`) nested inside `simulation_artifacts`. Handles `problem_type == "binary"` arrays correctly and dynamically suppresses `roc_auc` dimension mismatch or missing class errors using `labels=...`.
 - [x] AC-18.4: Saves a clean CSV (`nanotabpfn_summary.csv`) containing average metric scores grouped by `task_id`.
+- [x] AC-18.5: Flags datasets as out-of-distribution (OOD) if they exceed training limits defined in `config.py` (`num_instances > config.MAX_ROWS`, `n_features > config.MAX_FEATURES`, or `n_classes > config.MAX_CLASSES`).
+- [x] AC-18.6: Outputs separate mean score summaries for All datasets, In-Distribution datasets, and Out-Of-Distribution datasets, and includes the `is_ood` flag in the final summary CSV.
 
 ### Global Model Sharing
 

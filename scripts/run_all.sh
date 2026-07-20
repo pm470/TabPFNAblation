@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Run all activation × seed combinations sequentially.
-# For V1, just GELU with a few seeds to validate the pipeline.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-ACTIVATIONS=("gelu")
+ACTIVATIONS=("bilinear" "swiglu" "geglu" "relu" "gelu" "swish" "prelu" "leaky_relu")
 SEEDS=(0 1 2)
 NUM_STEPS=2500
 EVAL_EVERY=25

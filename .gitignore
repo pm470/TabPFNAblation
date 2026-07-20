@@ -10,18 +10,22 @@ __pycache__/
 # Data
 *.h5
 
+# Plots
+plots/
+results_mock/
+
 # Local config
 .env
 uv.toml
 
 # Results (generated, don't commit)
 results/
+results_mock/
 results_test/
 results_test_determinism/
 
 # Plots (generated)
-training_curves.png
-final_boxplot.png
+plots/
 
 # IDE
 .idea/

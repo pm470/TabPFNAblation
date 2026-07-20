@@ -3,7 +3,7 @@ id: CORE-003
 title: "Seed Determinism"
 status: implemented
 module: train.py
-last_synced: 2026-07-10
+last_synced: 2026-07-18
 ---
 
 # Seed Determinism
@@ -35,6 +35,10 @@ As a researcher, I want full control over random seeds so that experiments are e
 - [x] AC-14: Two short `train()` runs with different seeds produce different weights afterward.
 - [x] AC-15: Two forward passes on identical input, with the model constructed under the same seed, produce identical output tensors.
 - [x] AC-16: Two forward passes on identical input, with the model constructed under different seeds, produce different output tensors.
+
+### PriorDumpDataLoader Data Diversity
+
+- [x] AC-17: `PriorDumpDataLoader` with different seeds reads different data slices from the HDF5 file, ensuring that the only shared variance source is not limited to weight initialization.
 
 ## Notes
 

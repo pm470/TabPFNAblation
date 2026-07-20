@@ -20,6 +20,7 @@ dependencies = [
     "matplotlib>=3.8",
     "autogluon-tabular==1.5.1b20260626",
     "tabarena @ git+https://github.com/autogluon/tabarena.git@bdc1c82ee468f111a8100bc0f57767fb0150c980#subdirectory=packages/tabarena",
+    "python-dotenv>=1.2.2",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,13 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "ruff>=0.12",
+    "pyright>=1.1.300",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.ruff]
@@ -49,11 +57,15 @@ convention = "google"
 prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
+    "sys_platform == 'darwin'",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = "src"
+filterwarnings = [
+    "ignore:Can't initialize NVML:UserWarning",
+]
 
 [tool.pyright]
 venvPath = "."

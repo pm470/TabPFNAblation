@@ -15,7 +15,9 @@ def run_training(seed):
         num_layers=1,
         num_outputs=2,
     )
-    prior = NanopriorDataset(
+    from torch.utils.data import DataLoader
+
+    prior_dataset = NanopriorDataset(
         num_steps=3,
         batch_size=2,
         max_seq_len=150,
@@ -23,9 +25,10 @@ def run_training(seed):
         max_classes=2,
         device=torch.device("cpu"),
     )
+    prior_loader = DataLoader(prior_dataset, batch_size=None, num_workers=0)
     trained_model, _ = train(
         model,
-        prior,
+        prior_loader,
         lr=1e-3,
         device=torch.device("cpu"),
         steps_per_eval=100,

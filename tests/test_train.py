@@ -106,6 +106,132 @@ def test_prior_dump_dataloader_wraparound(tmp_path):
     assert loader.pointer == 2
 
 
+def test_prior_dump_dataloader_seed_offset(tmp_path):
+    """PriorDumpDataLoader with different seeds starts at different offsets."""
+    h5_path = tmp_path / "tiny_prior.h5"
+    num_samples = 100  # Large enough to make collisions unlikely
+
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("max_num_classes", data=[2])
+        f.create_dataset("X", data=np.random.randn(num_samples, 10, 5).astype(np.float32))
+        f.create_dataset("y", data=np.random.randint(0, 2, (num_samples, 10)).astype(np.float32))
+        f.create_dataset("num_features", data=np.full(num_samples, 5, dtype=np.int32))
+        f.create_dataset("num_datapoints", data=np.full(num_samples, 10, dtype=np.int32))
+        f.create_dataset("single_eval_pos", data=np.full(num_samples, 5, dtype=np.int32))
+
+    loader_a = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"), seed=0)
+    loader_b = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"), seed=1)
+    loader_none = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"))
+
+    # Different seeds → different starting pointers
+    assert loader_a.pointer != loader_b.pointer
+    # No seed → starts at 0
+    assert loader_none.pointer == 0
+
+
+def test_prior_dump_dataloader_seed_alignment(tmp_path):
+    """PriorDumpDataLoader aligns seed offsets to batch size."""
+    h5_path = tmp_path / "tiny_prior.h5"
+    num_samples = 100
+
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("max_num_classes", data=[2])
+        f.create_dataset("X", data=np.random.randn(num_samples, 10, 5).astype(np.float32))
+        f.create_dataset("y", data=np.random.randint(0, 2, (num_samples, 10)).astype(np.float32))
+        f.create_dataset("num_features", data=np.full(num_samples, 5, dtype=np.int32))
+        f.create_dataset("num_datapoints", data=np.full(num_samples, 10, dtype=np.int32))
+        f.create_dataset("single_eval_pos", data=np.full(num_samples, 5, dtype=np.int32))
+
+    # Test with multiple random seeds to ensure alignment holds
+    for seed in range(5):
+        loader = PriorDumpDataLoader(
+            filename=str(h5_path), num_steps=1, batch_size=8, device=torch.device("cpu"), seed=seed
+        )
+        assert loader.pointer % 8 == 0, f"Pointer {loader.pointer} not aligned to batch size 8 for seed {seed}"
+
+
+def test_prior_dump_dataloader_seed_determinism(tmp_path):
+    """PriorDumpDataLoader with the same seed always starts at the same offset."""
+    h5_path = tmp_path / "tiny_prior.h5"
+    num_samples = 100
+
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("max_num_classes", data=[2])
+        f.create_dataset("X", data=np.random.randn(num_samples, 10, 5).astype(np.float32))
+        f.create_dataset("y", data=np.random.randint(0, 2, (num_samples, 10)).astype(np.float32))
+        f.create_dataset("num_features", data=np.full(num_samples, 5, dtype=np.int32))
+        f.create_dataset("num_datapoints", data=np.full(num_samples, 10, dtype=np.int32))
+        f.create_dataset("single_eval_pos", data=np.full(num_samples, 5, dtype=np.int32))
+
+    loader1 = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"), seed=42)
+    loader2 = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"), seed=42)
+
+    assert loader1.pointer == loader2.pointer
+
+
+def test_prior_dump_dataloader_seed_different_data(tmp_path):
+    """PriorDumpDataLoader with different seeds yields different batch data."""
+    h5_path = tmp_path / "prior.h5"
+    num_samples = 200
+
+    rng = np.random.RandomState(99)
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("max_num_classes", data=[2])
+        f.create_dataset("X", data=rng.randn(num_samples, 10, 5).astype(np.float32))
+        f.create_dataset("y", data=rng.randint(0, 2, (num_samples, 10)).astype(np.float32))
+        f.create_dataset("num_features", data=np.full(num_samples, 5, dtype=np.int32))
+        f.create_dataset("num_datapoints", data=np.full(num_samples, 10, dtype=np.int32))
+        f.create_dataset("single_eval_pos", data=np.full(num_samples, 5, dtype=np.int32))
+
+    loader_a = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"), seed=0)
+    loader_b = PriorDumpDataLoader(filename=str(h5_path), num_steps=1, batch_size=2, device=torch.device("cpu"), seed=1)
+
+    batch_a = next(iter(loader_a))
+    batch_b = next(iter(loader_b))
+
+    assert not torch.equal(batch_a["x"], batch_b["x"])
+
+
+def test_prior_dump_dataloader_skip_steps(tmp_path):
+    """PriorDumpDataLoader skip_steps advances the pointer for auto-resume."""
+    h5_path = tmp_path / "prior.h5"
+    num_samples = 200
+
+    rng = np.random.RandomState(99)
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("max_num_classes", data=[2])
+        f.create_dataset("X", data=rng.randn(num_samples, 10, 5).astype(np.float32))
+        f.create_dataset("y", data=rng.randint(0, 2, (num_samples, 10)).astype(np.float32))
+        f.create_dataset("num_features", data=np.full(num_samples, 5, dtype=np.int32))
+        f.create_dataset("num_datapoints", data=np.full(num_samples, 10, dtype=np.int32))
+        f.create_dataset("single_eval_pos", data=np.full(num_samples, 5, dtype=np.int32))
+
+    batch_size = 4
+    skip = 10  # simulate resuming after 10 steps
+
+    # A fresh loader that runs 15 steps from seed offset
+    loader_full = PriorDumpDataLoader(
+        filename=str(h5_path), num_steps=15, batch_size=batch_size, device=torch.device("cpu"), seed=42
+    )
+    # A resumed loader that skips the first 10 steps
+    loader_resumed = PriorDumpDataLoader(
+        filename=str(h5_path), num_steps=5, batch_size=batch_size, device=torch.device("cpu"), seed=42, skip_steps=skip
+    )
+
+    # The resumed loader's pointer should equal the full loader's pointer
+    # after consuming 10 batches
+    expected_pointer = (loader_full.pointer + skip * batch_size) % num_samples
+    assert loader_resumed.pointer == expected_pointer
+
+    # Consume all batches from both and compare: the last 5 batches
+    # of the full loader should match the 5 batches of the resumed loader
+    full_batches = list(loader_full)
+    resumed_batches = list(loader_resumed)
+
+    for fb, rb in zip(full_batches[10:], resumed_batches, strict=True):
+        assert torch.equal(fb["x"], rb["x"])
+
+
 def test_save_checkpoint_helper(tmp_path):
     """_save_checkpoint() correctly calls eval() and train() on optimizer."""
     import schedulefree

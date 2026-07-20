@@ -3,7 +3,7 @@ id: CORE-002
 title: "Training Pipeline"
 status: implemented
 module: train.py
-last_synced: 2026-07-11
+last_synced: 2026-07-19
 ---
 
 # Training Pipeline
@@ -51,6 +51,17 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-21.7: New evaluation metrics are appended to the existing `metrics.jsonl` file instead of overwriting it.
 - [x] AC-21.8: `slurm/generate_data.sbatch` and `slurm/train.sbatch` implement file existence checks (on the final HDF5 file and final checkpoint, respectively) to exit cleanly without re-running completed work.
 
+### PriorDumpDataLoader
+
+- [x] AC-31: `PriorDumpDataLoader.__init__` accepts an optional `seed` parameter (default `None`).
+- [x] AC-32: When `seed` is provided, the initial `self.pointer` is set to a deterministic offset computed via SHA-256 hash of the seed, uniformly distributed across `[0, dataset_size)`, and then aligned to a multiple of `batch_size`.
+- [x] AC-33: When `seed` is `None`, the initial `self.pointer` is `0` (backward-compatible default).
+- [x] AC-34: Two instances with the same `seed` and same HDF5 file always produce the same initial pointer.
+- [x] AC-35: Two instances with different seeds produce different initial pointers (with overwhelming probability for reasonably sized datasets).
+- [x] AC-36: `run_experiment.py` and `train_ablation.py` pass `seed=args.seed` when constructing `PriorDumpDataLoader`.
+- [x] AC-37: `PriorDumpDataLoader.__init__` accepts an optional `skip_steps` parameter (default `0`) that advances the pointer by `skip_steps * batch_size` (modulo dataset size) after computing the seed offset.
+- [x] AC-38: `run_experiment.py` passes `skip_steps=start_step` when auto-resuming from a checkpoint, so the loader continues from where the previous run left off in the data sequence.
+
 ### NanopriorDataLoader
 
 - [x] AC-22: Inherits from `torch.utils.data.IterableDataset` and is wrapped by `torch.utils.data.DataLoader` for batching/multiprocessing.
@@ -63,8 +74,17 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-29: The `num_classes` parameter is randomized per batch but bounded by `max_classes`.
 - [x] AC-30: Yields tensors matching the `x` and `y` shapes expected by `NanoTabPFNModel`.
 
+### Mixed-Precision Training
+
+- [x] AC-31: The forward pass and loss computation are wrapped in `torch.autocast(device_type=..., dtype=torch.bfloat16)` when the device supports it (CUDA or ROCm). On CPU/MPS, autocast is not used.
+- [x] AC-32: Model parameters remain in float32 (master weights). Autocast handles the temporary bf16 downcast for compute-heavy ops (Linear, attention) while keeping precision-sensitive ops (LayerNorm, softmax, loss) in float32.
+- [x] AC-33: No `GradScaler` is used — bfloat16 has the same dynamic range as float32, so loss scaling is unnecessary.
+- [x] AC-34: The `train()` function accepts an `autocast_dtype` parameter (default: `torch.bfloat16`) that controls the autocast dtype. Passing `None` disables autocast entirely.
+- [x] AC-35: The autocast dtype is logged in the experiment config JSON.
+
 ## Notes
 
 - The ScheduleFree optimizer eliminates the need for a learning rate scheduler while maintaining competitive performance.
 - The `weight_decay=0.0` is explicit — no weight decay is applied.
 - Training data (`y`) is sliced to only training rows (`y[:, :train_test_split_index]`) before being passed to the model, while full `y` is kept for computing loss on test rows.
+- Mixed-precision with bfloat16 autocast enables FlashAttention (which requires bf16/fp16 inputs) while maintaining float32 numerical stability in normalization layers and the optimizer. This follows the same approach used by Google's TabFM.
