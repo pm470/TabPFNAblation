@@ -214,7 +214,7 @@ def create_mlp(
 ) -> nn.Module:
     """Factory function to create the appropriate MLP based on the activation type."""
     activation_name = activation.lower().replace(" ", "_")
-    if activation_name in ["swiglu", "bilinear"]:
+    if activation_name in ["swiglu", "bilinear", "geglu"]:
         return GatedMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
     return StandardMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
 
@@ -277,6 +277,8 @@ class GatedMLP(nn.Module):
         up = self.linear_up(x)
         if self.activation_name == "swiglu":
             gate = F.silu(gate)
+        elif self.activation_name == "geglu":
+            gate = F.gelu(gate)
         elif self.activation_name == "bilinear":
             pass
         else:

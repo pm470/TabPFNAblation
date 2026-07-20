@@ -19,7 +19,7 @@ case $CHUNK in
   ACTIVATIONS=("prelu" "leaky_relu")
   ;;
 3)
-  ACTIVATIONS=("swiglu" "bilinear")
+  ACTIVATIONS=("swiglu" "bilinear" "geglu")
   ;;
 *)
   echo "Error: Invalid chunk number. Please use 1, 2, or 3."

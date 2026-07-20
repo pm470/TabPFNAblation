@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-ACTIVATIONS=("bilinear" "swiglu" "relu" "gelu" "swish" "prelu" "leaky_relu")
+ACTIVATIONS=("bilinear" "swiglu" "geglu" "relu" "gelu" "swish" "prelu" "leaky_relu")
 SEEDS=(0 1 2)
 NUM_STEPS=2500
 EVAL_EVERY=25
