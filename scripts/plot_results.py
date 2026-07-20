@@ -91,7 +91,11 @@ def _get_top_activations(all_results: dict[str, list[list[dict]]], n: int = 2) -
     """
     final_means: dict[str, float] = {}
     for name, seed_runs in all_results.items():
-        final_aucs = [run[-1].get("tabarena_roc_auc", run[-1].get("roc_auc", float("nan"))) for run in seed_runs]
+        tabarena_aucs = [run[-1].get("tabarena_roc_auc") for run in seed_runs]
+        if any(v is not None for v in tabarena_aucs):
+            final_aucs = [v if v is not None else float("nan") for v in tabarena_aucs]
+        else:
+            final_aucs = [run[-1].get("roc_auc", float("nan")) for run in seed_runs]
         final_means[name] = float(np.nanmean(final_aucs))
 
     # Sort by mean, exclude baseline, take top-N
@@ -180,7 +184,11 @@ def plot_bar_chart_with_error_bars(
     baseline_mean: float = 0.0
 
     for activation_name, seed_runs in all_results.items():
-        final_aucs = [run[-1].get("tabarena_roc_auc", run[-1].get("roc_auc", float("nan"))) for run in seed_runs]
+        tabarena_aucs = [run[-1].get("tabarena_roc_auc") for run in seed_runs]
+        if any(v is not None for v in tabarena_aucs):
+            final_aucs = [v if v is not None else float("nan") for v in tabarena_aucs]
+        else:
+            final_aucs = [run[-1].get("roc_auc", float("nan")) for run in seed_runs]
 
         act_mean = float(np.nanmean(final_aucs))
         act_std = float(np.nanstd(final_aucs))
