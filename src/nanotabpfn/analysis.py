@@ -95,7 +95,7 @@ def compute_relative_improvement(
     return improvements
 
 
-def paired_significance_test(baseline: dict[str, float], variant: dict[str, float]) -> dict:
+def paired_significance_test(baseline: dict[str, float], variant: dict[str, float], higher_is_better: bool) -> dict:
     """Run a paired t-test between baseline and variant scores across datasets.
 
     Samples are paired by `task_id` (each dataset contributes one baseline
@@ -123,7 +123,10 @@ def paired_significance_test(baseline: dict[str, float], variant: dict[str, floa
             "n_datasets": len(common_tasks),
         }
 
-    result = stats.ttest_rel(variant_values, baseline_values)
+    if higher_is_better:
+        result = stats.ttest_rel(variant_values, baseline_values)
+    else:
+        result = stats.ttest_rel(baseline_values, variant_values)
     return {
         "t_statistic": float(result.statistic),
         "p_value": float(result.pvalue),
@@ -159,7 +162,7 @@ def compare_variant_to_baseline(
     improvements = compute_relative_improvement(baseline_scores, variant_scores, higher_is_better)
     mean_improvement_pct = 100 * sum(improvements.values()) / len(improvements) if improvements else float("nan")
 
-    significance = paired_significance_test(baseline_scores, variant_scores)
+    significance = paired_significance_test(baseline_scores, variant_scores, higher_is_better)
 
     return {
         "variant": variant_activation,
