@@ -91,7 +91,7 @@ def _get_top_activations(all_results: dict[str, list[list[dict]]], n: int = 2) -
     """
     final_means: dict[str, float] = {}
     for name, seed_runs in all_results.items():
-        final_aucs = [run[-1].get("roc_auc", float("nan")) for run in seed_runs]
+        final_aucs = [run[-1].get("tabarena_roc_auc", run[-1].get("roc_auc", float("nan"))) for run in seed_runs]
         final_means[name] = float(np.nanmean(final_aucs))
 
     # Sort by mean, exclude baseline, take top-N
@@ -135,6 +135,15 @@ def load_all_results(results_dir: str = "results") -> dict[str, list[list[dict]]
                     if line:
                         metrics.append(json.loads(line))
             if metrics:
+                tabarena_csv = seed_dir / "benchmark_final" / "tabarena_exp" / "nanotabpfn_summary.csv"
+                if tabarena_csv.exists():
+                    try:
+                        import pandas as pd
+                        df = pd.read_csv(tabarena_csv)
+                        if "roc_auc" in df.columns:
+                            metrics[-1]["tabarena_roc_auc"] = float(df["roc_auc"].mean())
+                    except Exception:
+                        pass
                 seed_runs.append(metrics)
         if seed_runs:
             all_results[activation_name] = seed_runs
@@ -152,11 +161,11 @@ def plot_bar_chart_with_error_bars(
     output_dir: str = "plots",
     is_mock: bool = False,
 ) -> None:
-    """Bar chart of Normalized ROC-AUC per activation with error bars.
-
+    """Bar chart of ROC-AUC per activation with error bars.
+    
     Bars are sorted by descending mean performance. The GELU baseline
     is plotted as a horizontal reference line with a shaded uncertainty band.
-
+    
     Args:
         all_results: Dict mapping activation name → list of seed runs.
         output_dir: Directory for output files.
@@ -171,7 +180,7 @@ def plot_bar_chart_with_error_bars(
     baseline_mean: float = 0.0
 
     for activation_name, seed_runs in all_results.items():
-        final_aucs = [run[-1].get("roc_auc", float("nan")) for run in seed_runs]
+        final_aucs = [run[-1].get("tabarena_roc_auc", run[-1].get("roc_auc", float("nan"))) for run in seed_runs]
 
         act_mean = float(np.nanmean(final_aucs))
         act_std = float(np.nanstd(final_aucs))
@@ -213,8 +222,8 @@ def plot_bar_chart_with_error_bars(
     ax.legend(fontsize=11, loc="upper right")
 
     ax.set_xlabel("Activation Function", fontsize=12)
-    ax.set_ylabel("Normalized ROC-AUC", fontsize=12)
-    ax.set_title("Normalized ROC-AUC by Activation Function", fontsize=14)
+    ax.set_ylabel("ROC-AUC", fontsize=12)
+    ax.set_title("ROC-AUC by Activation Function", fontsize=14)
     ax.set_ylim(bottom=0.5)
     ax.grid(True, alpha=0.3, axis="y")
 
@@ -247,7 +256,7 @@ def plot_learning_curves_best(
 ) -> None:
     """Learning curves for GELU baseline + top-2 best-performing activations.
 
-    Shows pre-training steps vs. Normalized ROC-AUC with ±1 std shaded
+    Shows pre-training steps vs. ROC-AUC with ±1 std shaded
     uncertainty bands across seeds.
 
     Args:
@@ -286,7 +295,7 @@ def plot_learning_curves_best(
         ax.fill_between(steps, mean_auc - std_auc, mean_auc + std_auc, alpha=0.15, color=palette[idx])
 
     ax.set_xlabel("Pre-training Step", fontsize=12)
-    ax.set_ylabel("Normalized ROC-AUC", fontsize=12)
+    ax.set_ylabel("ROC-AUC", fontsize=12)
     ax.set_title("Learning Curves: Baseline vs. Best Variants", fontsize=14)
     ax.legend(fontsize=11, loc="lower right")
     ax.grid(True, alpha=0.3)
@@ -349,7 +358,7 @@ def plot_depth_scaling(
         )
 
     ax.set_xlabel("Number of Transformer Layers", fontsize=12)
-    ax.set_ylabel("Normalized ROC-AUC", fontsize=12)
+    ax.set_ylabel("ROC-AUC", fontsize=12)
     ax.set_title("Architecture Scaling: Depth", fontsize=14)
     ax.set_xticks(layers)
     ax.legend(fontsize=11)
@@ -368,7 +377,7 @@ def plot_width_scaling(
     output_dir: str = "plots",
     is_mock: bool = False,
 ) -> None:
-    """Line plot of FFN hidden dim (log scale) vs. Normalized ROC-AUC.
+    """Line plot of FFN hidden dim (log scale) vs. ROC-AUC.
 
     Args:
         ablation_data: Architecture ablation data dict with ``"width"`` key
@@ -399,7 +408,7 @@ def plot_width_scaling(
     ax.set_xticks(hidden_dims)
     ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
     ax.set_xlabel("FFN Hidden Dimension", fontsize=12)
-    ax.set_ylabel("Normalized ROC-AUC", fontsize=12)
+    ax.set_ylabel("ROC-AUC", fontsize=12)
     ax.set_title("Architecture Scaling: Width", fontsize=14)
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
