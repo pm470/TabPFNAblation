@@ -428,7 +428,20 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: load data and generate all plots."""
     args = parse_args()
-    results_dir = "results_mock" if args.mock else "results"
+    
+    import os
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    if args.mock:
+        results_dir = "results_mock"
+    else:
+        workspace_dir = os.environ.get("WORKSPACE_DIR", "/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn_data")
+        results_dir = os.path.join(workspace_dir, "results")
+
     output_dir = args.output_dir
 
     results = load_all_results(results_dir)
