@@ -1,8 +1,11 @@
 """TabPFN Model definitions."""
 
+import typing
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.nn import LayerNorm, MultiheadAttention
@@ -27,15 +30,23 @@ class NanoTabPFNModel(nn.Module):
         num_layers: int,
         num_outputs: int,
         activation: str = "gelu",
+        gradient_checkpointing: bool = False,
     ):
         """Initializes the feature/target encoder, transformer stack and decoder."""
         super().__init__()
+        self.feature_checkpointing = gradient_checkpointing
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
             self.transformer_blocks.append(
-                TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size, activation=activation)
+                TransformerEncoderLayer(
+                    embedding_size,
+                    num_attention_heads,
+                    mlp_hidden_size,
+                    activation=activation,
+                    gradient_checkpointing=gradient_checkpointing,
+                )
             )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs, activation=activation)
 
@@ -135,9 +146,11 @@ class TransformerEncoderLayer(nn.Module):
         batch_first: bool = True,
         device=None,
         dtype=None,
+        gradient_checkpointing: bool = False,
     ):
         """Initialize TransformerEncoderLayer."""
         super().__init__()
+        self.gradient_checkpointing = gradient_checkpointing
         self.self_attention_between_datapoints = MultiheadAttention(
             embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype
         )
@@ -166,6 +179,18 @@ class TransformerEncoderLayer(nn.Module):
         Returns
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
         """
+        if self.gradient_checkpointing and self.training:
+            return typing.cast(
+                torch.Tensor,
+                torch.utils.checkpoint.checkpoint(
+                    self._forward_impl, src, torch.tensor(train_test_split_index), use_reentrant=False
+                ),
+            )
+        return self._forward_impl(src, train_test_split_index)
+
+    def _forward_impl(self, src: torch.Tensor, train_test_split_index: int | torch.Tensor) -> torch.Tensor:
+        if isinstance(train_test_split_index, torch.Tensor):
+            train_test_split_index = int(train_test_split_index.item())
         batch_size, rows_size, col_size, embedding_size = src.shape
         # attention between features
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)

@@ -3,7 +3,7 @@ id: CORE-001
 title: "NanoTabPFN Model Architecture"
 status: implemented
 module: model.py
-last_synced: 2026-07-15
+last_synced: 2026-07-23
 ---
 
 # NanoTabPFN Model Architecture
@@ -16,7 +16,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 
 ## NanoTabPFNModel
 
-- [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, and `activation` (default `"gelu"`) as parameters.
+- [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, `activation` (default `"gelu"`), and `gradient_checkpointing` (default `False`) as parameters.
 - [x] AC-2: The model contains a `FeatureEncoder`, a `TargetEncoder`, a `nn.ModuleList` of `TransformerEncoderLayer` blocks (length `num_layers`), and a `Decoder`.
 - [x] AC-3: Forward pass accepts a tuple `(x_src, y_src)` and an integer `train_test_split_index`.
 - [x] AC-4: If `y_src` has fewer dimensions than `x_src`, an extra trailing dimension is added via `unsqueeze(-1)`.

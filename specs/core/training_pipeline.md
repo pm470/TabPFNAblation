@@ -3,7 +3,7 @@ id: CORE-002
 title: "Training Pipeline"
 status: implemented
 module: train.py
-last_synced: 2026-07-19
+last_synced: 2026-07-23
 ---
 
 # Training Pipeline
@@ -20,6 +20,9 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-2: Uses `schedulefree.AdamWScheduleFree` optimizer with `weight_decay=0.0` and the provided `lr`.
 - [x] AC-3: Gradient clipping is applied via `torch.nn.utils.clip_grad_norm_` with `max_norm=1.0`.
 - [x] AC-4: The optimizer step order is: `loss.backward()` → `clip_grad_norm_` → `optimizer.step()` → `optimizer.zero_grad()`.
+- [x] AC-4.1: Gradient accumulation is supported via `accumulation_steps` parameter.
+- [x] AC-4.2: Loss is divided by `accumulation_steps` before `loss.backward()`.
+- [x] AC-4.3: `optimizer.step()` and `optimizer.zero_grad()` are only called when `(step + 1) % accumulation_steps == 0` or at the very last step.
 - [x] AC-5: Evaluation runs every `steps_per_eval` steps (at step indices `steps_per_eval - 1`, `2*steps_per_eval - 1`, etc.).
 - [x] AC-6: During evaluation, model and optimizer are switched to `.eval()` mode, then back to `.train()` mode after.
 - [x] AC-7: Evaluation creates a `NanoTabPFNClassifier` and passes it to the `eval_func` callback.
@@ -81,6 +84,11 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-33: No `GradScaler` is used — bfloat16 has the same dynamic range as float32, so loss scaling is unnecessary.
 - [x] AC-34: The `train()` function accepts an `autocast_dtype` parameter (default: `torch.bfloat16`) that controls the autocast dtype. Passing `None` disables autocast entirely.
 - [x] AC-35: The autocast dtype is logged in the experiment config JSON.
+
+### Gradient Checkpointing
+
+- [x] AC-36: Model accepts a `gradient_checkpointing` boolean flag.
+- [x] AC-37: When `gradient_checkpointing=True`, the Transformer forward pass uses `torch.utils.checkpoint.checkpoint` to save memory during training.
 
 ## Notes
 

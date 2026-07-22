@@ -5,7 +5,7 @@ import hashlib
 import os
 import random
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sized
 from pathlib import Path
 from typing import TypedDict
 
@@ -156,6 +156,7 @@ def train(
     checkpoint_every: int | None = None,
     checkpoint_every_minutes: float | None = None,
     start_step: int = 0,
+    accumulation_steps: int = 1,
     autocast_dtype: torch.dtype | None = torch.bfloat16,
     metrics_file: str | Path | None = None,
 ) -> tuple[NanoTabPFNModel, list[dict]]:
@@ -173,6 +174,7 @@ def train(
         checkpoint_every: (int|None) save a checkpoint every N steps
         checkpoint_every_minutes: (float|None) save a checkpoint every N minutes
         start_step: (int) the starting step to offset logging when resuming
+        accumulation_steps: (int) number of steps to accumulate gradients over
         autocast_dtype: (torch.dtype|None) dtype for torch.autocast during forward/loss.
                         Default torch.bfloat16 enables FlashAttention. None disables autocast.
         metrics_file: (str|Path|None) path to a JSONL file to stream evaluation metrics dynamically.
@@ -256,12 +258,21 @@ def train(
                 optimizer.zero_grad()
                 continue
 
+            loss = loss / accumulation_steps
             loss.backward()
-            total_loss = loss.cpu().detach().item()
+            total_loss = (loss * accumulation_steps).cpu().detach().item()
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            optimizer.zero_grad()
+            is_last_step = False
+            if isinstance(prior, Sized):
+                is_last_step = (i + 1) == len(prior)
+            elif hasattr(prior, "num_steps"):
+                is_last_step = (i + 1) == getattr(prior, "num_steps")  # noqa: B009
+
+            if (i + 1) % accumulation_steps == 0 or is_last_step:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                optimizer.zero_grad()
+
             step_train_duration = time.time() - step_start_time
             train_time += step_train_duration
 
