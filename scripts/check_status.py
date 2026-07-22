@@ -20,7 +20,7 @@ EXPECTED_ACTIVATIONS = [
     "swiglu",
     "swish",
 ]
-EXPECTED_SEEDS = list(range(10))
+EXPECTED_SEEDS = list(range(20))
 EXPECTED_STEPS = 5000
 
 

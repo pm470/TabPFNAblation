@@ -1,10 +1,18 @@
 #!/bin/bash
 # Submits a chunk of the ablation study to Slurm.
 # Designed to be split across 3 cluster accounts to maximize fair-share priority.
-# Usage: bash slurm/submit_chunk.sh <chunk_number>
+# Usage: bash slurm/submit_chunk.sh [--dry-run] <chunk_number>
 
-if [ -z "$1" ]; then
-  echo "Usage: $0 <chunk_number> (1, 2, or 3)"
+DRY_RUN=0
+if [ "$1" == "--dry-run" ]; then
+  DRY_RUN=1
+  shift
+elif [ "$2" == "--dry-run" ]; then
+  DRY_RUN=1
+fi
+
+if [ -z "$1" ] || [ "$1" == "--dry-run" ]; then
+  echo "Usage: $0 [--dry-run] <chunk_number> (1, 2, or 3)"
   exit 1
 fi
 
@@ -42,7 +50,7 @@ for act in "${ACTIVATIONS[@]}"; do
   TRAIN_SEEDS=""
   BENCH_SEEDS=""
   
-  for seed in {0..9}; do
+  for seed in {0..19}; do
     # Check if training is completed
     if [ ! -f "${RESULTS_DIR}/${act}/seed_${seed}/checkpoints/final.pt" ]; then
       TRAIN_SEEDS="${TRAIN_SEEDS}${TRAIN_SEEDS:+,}${seed}"
@@ -59,7 +67,12 @@ for act in "${ACTIVATIONS[@]}"; do
     echo "   [Training fully complete. Skipping train job.]"
     TRAIN_ID=""
   else
-    TRAIN_ID=$(sbatch --parsable --array="$TRAIN_SEEDS" --export=ALL,ACTIVATION="$act" slurm/train.sbatch)
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "   [DRY-RUN] sbatch --parsable --array=\"$TRAIN_SEEDS\" --export=ALL,ACTIVATION=\"$act\" slurm/train.sbatch"
+      TRAIN_ID="DRY_RUN_TRAIN_ID"
+    else
+      TRAIN_ID=$(sbatch --parsable --array="$TRAIN_SEEDS" --export=ALL,ACTIVATION="$act" slurm/train.sbatch)
+    fi
     echo "   [Train Job ID: $TRAIN_ID (Queued Seeds: $TRAIN_SEEDS)]"
   fi
 
@@ -67,10 +80,20 @@ for act in "${ACTIVATIONS[@]}"; do
     echo "   [Benchmarking fully complete. Skipping bench job.]"
   else
     if [ -n "$TRAIN_ID" ]; then
-      BENCH_ID=$(sbatch --parsable --dependency=afterok:"$TRAIN_ID" --array="$BENCH_SEEDS" --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "   [DRY-RUN] sbatch --parsable --dependency=afterok:\"$TRAIN_ID\" --array=\"$BENCH_SEEDS\" --export=ALL,ACTIVATION=\"$act\" slurm/benchmark.sbatch"
+        BENCH_ID="DRY_RUN_BENCH_ID"
+      else
+        BENCH_ID=$(sbatch --parsable --dependency=afterok:"$TRAIN_ID" --array="$BENCH_SEEDS" --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+      fi
       echo "   [Benchmark Job ID: $BENCH_ID (Queued Seeds: $BENCH_SEEDS, waiting on $TRAIN_ID)]"
     else
-      BENCH_ID=$(sbatch --parsable --array="$BENCH_SEEDS" --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "   [DRY-RUN] sbatch --parsable --array=\"$BENCH_SEEDS\" --export=ALL,ACTIVATION=\"$act\" slurm/benchmark.sbatch"
+        BENCH_ID="DRY_RUN_BENCH_ID"
+      else
+        BENCH_ID=$(sbatch --parsable --array="$BENCH_SEEDS" --export=ALL,ACTIVATION="$act" slurm/benchmark.sbatch)
+      fi
       echo "   [Benchmark Job ID: $BENCH_ID (Queued Seeds: $BENCH_SEEDS, starting immediately)]"
     fi
   fi
