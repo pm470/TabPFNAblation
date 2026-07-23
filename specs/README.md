@@ -75,8 +75,7 @@ specs/
 │   ├── plotting.md                    # EVAL-003
 │   └── variant_comparison.md          # EVAL-004
 └── experiment/
-    ├── activation_ablation.md         # EXP-001
-    └── run_orchestration.md           # EXP-002
+    └── activation_ablation.md         # EXP-001
 ```
 
 ## Sync Workflow

@@ -34,7 +34,7 @@ ACTIVATION_PROFILES: dict[str, dict[str, float]] = {
     "bilinear": {"final_auc": 0.74, "convergence_rate": 700, "noise_std": 0.013},
 }
 
-NUM_SEEDS: int = 10
+NUM_SEEDS: int = 20
 STEP_START: int = 25
 STEP_END: int = 5000
 STEP_INCREMENT: int = 25
