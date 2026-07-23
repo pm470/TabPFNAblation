@@ -234,45 +234,66 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
+def get_activation_module(name: str, device=None, dtype=None) -> nn.Module:
+    """Helper to return the PyTorch activation module for a given name."""
+    if name in ["gelu", "ge"]:
+        return nn.GELU()
+    if name in ["relu", "re"]:
+        return nn.ReLU()
+    if name in ["swish", "swi", "silu"]:
+        return nn.SiLU()
+    if name in ["leaky_relu"]:
+        return nn.LeakyReLU()
+    if name in ["prelu"]:
+        return nn.PReLU(device=device, dtype=dtype)
+    if name in ["mish", "mi"]:
+        return nn.Mish()
+    if name in ["identity", "linear", "bilinear"]:
+        return nn.Identity()
+    raise ValueError(f"Unsupported activation: {name}")
+
+
 def create_mlp(
     in_features: int, hidden_features: int, out_features: int, activation: str = "gelu", device=None, dtype=None
 ) -> nn.Module:
     """Factory function to create the appropriate MLP based on the activation type."""
     activation_name = activation.lower().replace(" ", "_")
-    if activation_name in ["swiglu", "bilinear", "geglu"]:
-        return GatedMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
-    return StandardMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
+
+    # Check if it's a gated activation
+    is_gated = activation_name.endswith("glu") or activation_name == "bilinear"
+
+    if is_gated:
+        # Extract the base name (e.g. 'swi' from 'swiglu', 'ge' from 'geglu')
+        gate_act_name = "identity" if activation_name == "bilinear" else activation_name[:-3]
+        gate_act = get_activation_module(gate_act_name, device, dtype)
+        return GatedMLP(in_features, hidden_features, out_features, gate_act, device, dtype)
+
+    act_module = get_activation_module(activation_name, device, dtype)
+    return StandardMLP(in_features, hidden_features, out_features, act_module, device, dtype)
 
 
 class StandardMLP(nn.Module):
     """Standard 2-layer MLP."""
 
     def __init__(
-        self, in_features: int, hidden_features: int, out_features: int, activation: str, device=None, dtype=None
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+        activation_module: nn.Module,
+        device=None,
+        dtype=None,
     ):
         """Initializes the standard MLP layers."""
         super().__init__()
-        self.activation_name = activation
+        self.activation = activation_module
         self.linear1 = nn.Linear(in_features, hidden_features, device=device, dtype=dtype)
         self.linear2 = nn.Linear(hidden_features, out_features, device=device, dtype=dtype)
-        if self.activation_name == "prelu":
-            self.prelu = nn.PReLU(device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Applies the MLP and standard activation function."""
         h = self.linear1(x)
-        if self.activation_name == "gelu":
-            h = F.gelu(h)
-        elif self.activation_name == "relu":
-            h = F.relu(h)
-        elif self.activation_name == "swish":
-            h = F.silu(h)
-        elif self.activation_name == "leaky_relu":
-            h = F.leaky_relu(h)
-        elif self.activation_name == "prelu":
-            h = self.prelu(h)
-        else:
-            raise ValueError(f"Unsupported standard activation: {self.activation_name}")
+        h = self.activation(h)
         return self.linear2(h)
 
 
@@ -280,11 +301,17 @@ class GatedMLP(nn.Module):
     """Dynamically sizes hidden dimensions to maintain parameter count across activations."""
 
     def __init__(
-        self, in_features: int, hidden_features: int, out_features: int, activation: str, device=None, dtype=None
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+        gate_activation_module: nn.Module,
+        device=None,
+        dtype=None,
     ):
         """Initializes the gated MLP layers."""
         super().__init__()
-        self.activation_name = activation
+        self.gate_activation = gate_activation_module
 
         # Baseline params (excluding out bias): in*H + H + H*out
         # Gated params (excluding out bias): 2*(in*H_new + H_new) + H_new*out
@@ -300,14 +327,7 @@ class GatedMLP(nn.Module):
         """Applies the MLP and gated activation function."""
         gate = self.linear_gate(x)
         up = self.linear_up(x)
-        if self.activation_name == "swiglu":
-            gate = F.silu(gate)
-        elif self.activation_name == "geglu":
-            gate = F.gelu(gate)
-        elif self.activation_name == "bilinear":
-            pass
-        else:
-            raise ValueError(f"Unsupported gated activation: {self.activation_name}")
+        gate = self.gate_activation(gate)
         return self.linear_down(gate * up)
 
 
