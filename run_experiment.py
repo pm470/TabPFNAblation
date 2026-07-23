@@ -50,6 +50,10 @@ def parse_args(argv=None):
     parser.add_argument("--mlp_hidden_size", type=int, default=192, help="MLP hidden size")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
     parser.add_argument("--num_outputs", type=int, default=10, help="Number of output classes")
+    parser.add_argument(
+        "--accumulation_steps", type=int, default=1, help="Number of steps to accumulate gradients over"
+    )
+    parser.add_argument("--gradient-checkpointing", action="store_true", help="Enable gradient checkpointing")
     parser.add_argument("--no-autocast", action="store_true", help="Disable bfloat16 autocast (use pure float32)")
     return parser.parse_args(argv)
 
@@ -73,6 +77,7 @@ def run_experiment(args):
         num_layers=args.num_layers,
         num_outputs=args.num_outputs,
         activation=args.activation,
+        gradient_checkpointing=args.gradient_checkpointing,
     )
 
     # Save config
@@ -98,6 +103,8 @@ def run_experiment(args):
         "max_features": args.max_features,
         "max_classes": args.max_classes,
         "data_file": args.data_file,
+        "accumulation_steps": args.accumulation_steps,
+        "gradient_checkpointing": args.gradient_checkpointing,
         "param_count": param_count,
         "device": str(device),
         "autocast_dtype": str(autocast_dtype) if autocast_dtype else None,
@@ -165,6 +172,7 @@ def run_experiment(args):
         checkpoint_dir=str(checkpoint_dir),
         checkpoint_every=args.checkpoint_every,
         start_step=start_step,
+        accumulation_steps=args.accumulation_steps,
         autocast_dtype=autocast_dtype,
         metrics_file=metrics_path,
     )
