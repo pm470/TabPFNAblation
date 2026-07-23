@@ -2,7 +2,7 @@
 id: CORE-003
 title: "Data Generation"
 status: implemented
-module: scripts/generate_prior.py
+module: scripts/data/generate_prior.py
 last_synced: 2026-07-01
 ---
 
@@ -14,7 +14,7 @@ As a researcher, I want to generate a synthetic prior dataset using `nanoTabICL`
 
 ## Acceptance Criteria
 
-### Data Generation Script (`scripts/generate_prior.py`)
+### Data Generation Script (`scripts/data/generate_prior.py`)
 
 - [x] AC-1: The script accepts `--output_file`, `--num_datasets`, `--batch_size`, `--max_seq_len`, `--max_features`, `--max_classes`, and `--num_workers` as CLI arguments.
 - [x] AC-2: Uses `NanopriorDataset` from `train.py` to generate the data on the fly.

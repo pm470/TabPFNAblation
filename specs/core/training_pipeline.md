@@ -61,7 +61,7 @@ As a researcher, I want a training loop that pre-trains NanoTabPFN on synthetic 
 - [x] AC-33: When `seed` is `None`, the initial `self.pointer` is `0` (backward-compatible default).
 - [x] AC-34: Two instances with the same `seed` and same HDF5 file always produce the same initial pointer.
 - [x] AC-35: Two instances with different seeds produce different initial pointers (with overwhelming probability for reasonably sized datasets).
-- [x] AC-36: `run_experiment.py` and `train_ablation.py` pass `seed=args.seed` when constructing `PriorDumpDataLoader`.
+- [x] AC-36: `run_experiment.py` passes `seed=args.seed` when constructing `PriorDumpDataLoader`.
 - [x] AC-37: `PriorDumpDataLoader.__init__` accepts an optional `skip_steps` parameter (default `0`) that advances the pointer by `skip_steps * batch_size` (modulo dataset size) after computing the seed offset.
 - [x] AC-38: `run_experiment.py` passes `skip_steps=start_step` when auto-resuming from a checkpoint, so the loader continues from where the previous run left off in the data sequence.
 

@@ -42,7 +42,7 @@ if [ -f "${DATA_DIR}/200k_3000x45_10.h5" ]; then
 fi
 
 export PYTHONUNBUFFERED=1
-UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/generate_prior.py \
+UV_INDEX_STRATEGY="unsafe-best-match" uv run python scripts/data/generate_prior.py \
   --output_file "${DATA_DIR}/200k_3000x45_10.h5" \
   --num_datasets 200000 \
   --max_seq_len 3000 \

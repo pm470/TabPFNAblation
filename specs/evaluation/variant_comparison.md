@@ -46,7 +46,7 @@ statistically significant.
 - [x] AC-12: Orchestrates load → seed-aggregate → relative improvement → significance test for one `(baseline, variant, metric)` triple.
 - [x] AC-13: Returns `mean_relative_improvement_pct` as the mean of per-dataset relative improvements, expressed as a percentage.
 
-### scripts/compare_variants.py
+### scripts/eval/compare_variants.py
 
 - [x] AC-14: Discovers all activation subdirectories under `--results_dir` other than `--baseline`.
 - [x] AC-15: Runs the comparison for both `roc_auc` and `log_loss` for every discovered variant.

@@ -9,7 +9,7 @@ expected by :func:`scripts.plot_results.load_all_results`:
 
 Usage::
 
-    python scripts/generate_mock_data.py
+    python scripts/data/generate_mock_data.py
 """
 
 from __future__ import annotations

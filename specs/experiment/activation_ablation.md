@@ -2,7 +2,7 @@
 id: EXP-001
 title: "Modular Training & Benchmarking Pipeline"
 status: implemented
-module: "train_ablation.py, benchmark_model.py, sbatch_train.sh, sbatch_benchmark.sh"
+module: "benchmark_model.py, sbatch_train.sh, sbatch_benchmark.sh"
 last_synced: 2026-07-10
 ---
 
@@ -14,7 +14,7 @@ As a researcher, I want a modular, cluster-ready pipeline that separates data lo
 
 ## Acceptance Criteria
 
-### Pretraining CLI Interface (`train_ablation.py`)
+### Pretraining CLI Interface (`run_experiment.py`)
 
 - [x] AC-1: `--activation` (str, default `"gelu"`) — activation function name.
 - [x] AC-2: `--data_file` (str, default `"300k_150x5_2.h5"`) — path to the HDF5 prior dump.
