@@ -3,7 +3,6 @@
 import contextlib
 import hashlib
 import os
-import random
 import time
 from collections.abc import Iterable, Iterator, Sized
 from pathlib import Path
@@ -19,8 +18,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from nanotabpfn import config
+from nanotabpfn.experiment_utils import save_memory_stat
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
-from nanotabpfn.utils import save_memory_stat
+from nanotabpfn.utils import get_default_device, set_randomness_seed
 
 
 class PriorBatch(TypedDict):
@@ -29,26 +29,6 @@ class PriorBatch(TypedDict):
     x: torch.Tensor
     y: torch.Tensor
     train_test_split_index: int
-
-
-def set_randomness_seed(seed):
-    """Set random seed for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def get_default_device() -> torch.device:
-    """Get default torch device."""
-    device = "cpu"
-    if torch.backends.mps.is_available():
-        device = "mps"
-    if torch.cuda.is_available():
-        device = "cuda"
-    return torch.device(device)
 
 
 def get_eval_datasets():

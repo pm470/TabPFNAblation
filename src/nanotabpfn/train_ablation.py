@@ -2,16 +2,11 @@
 
 import argparse
 import json
-from pathlib import Path
-
-import torch
 
 from nanotabpfn import config
-from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.experiment_utils import setup_experiment
 from nanotabpfn.train import (
     PriorDumpDataLoader,
-    get_default_device,
-    set_randomness_seed,
     train,
 )
 
@@ -40,50 +35,7 @@ def parse_args(argv=None):
 
 def run_training(args):
     """Run training with the given configuration."""
-    run_dir = Path(args.output_dir) / args.activation / f"seed_{args.seed}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_dir = run_dir / "checkpoints"
-
-    set_randomness_seed(args.seed)
-    device = get_default_device()
-
-    model = NanoTabPFNModel(
-        embedding_size=args.embedding_size,
-        num_attention_heads=args.num_attention_heads,
-        mlp_hidden_size=args.mlp_hidden_size,
-        num_layers=args.num_layers,
-        num_outputs=args.num_outputs,
-        activation=args.activation,
-    )
-
-    param_count = sum(p.numel() for p in model.parameters())
-    autocast_dtype = None if args.no_autocast else torch.bfloat16
-
-    config = {
-        "activation": args.activation,
-        "data_file": args.data_file,
-        "seed": args.seed,
-        "num_steps": args.num_steps,
-        "batch_size": args.batch_size,
-        "lr": args.lr,
-        "eval_every": args.eval_every,
-        "checkpoint_every": args.checkpoint_every,
-        "checkpoint_every_minutes": args.checkpoint_every_minutes,
-        "embedding_size": args.embedding_size,
-        "num_attention_heads": args.num_attention_heads,
-        "mlp_hidden_size": args.mlp_hidden_size,
-        "num_layers": args.num_layers,
-        "num_outputs": args.num_outputs,
-        "param_count": param_count,
-        "device": str(device),
-        "autocast_dtype": str(autocast_dtype) if autocast_dtype else None,
-    }
-
-    config_path = run_dir / "config.json"
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
-    print(f"Config saved to {config_path}")
-    print(f"Model parameters: {param_count:,}")
+    run_dir, checkpoint_dir, device, model, autocast_dtype = setup_experiment(args)
 
     # Create dataloader using the dumped HDF5
     prior = PriorDumpDataLoader(

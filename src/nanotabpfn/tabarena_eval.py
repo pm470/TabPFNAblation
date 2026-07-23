@@ -14,8 +14,8 @@ from tabarena.nips2025_utils.subset_predicate import SubsetPredicate
 from tabarena.nips2025_utils.tabarena_context import TabArenaContext
 
 from nanotabpfn import config
+from nanotabpfn.experiment_utils import save_memory_stat
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
-from nanotabpfn.utils import save_memory_stat
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -194,6 +194,11 @@ def run_tabarena_eval(
         save_memory_stat(run_dir, "peak_vram_eval_gb", max(_PEAK_MEM_BY_DATASET_GB.values()))
         save_memory_stat(run_dir, "peak_vram_eval_by_dataset_gb", dict(_PEAK_MEM_BY_DATASET_GB))
 
+    _generate_benchmark_summary(job_results, context, results_dir)
+
+
+def _generate_benchmark_summary(job_results: list[dict], context: TabArenaContext, results_dir: str) -> None:
+    """Extract metrics from TabArena jobs and generate a summary CSV report."""
     print("Generating benchmark summary...")
     try:
         import pandas as pd

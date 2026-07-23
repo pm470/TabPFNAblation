@@ -1,23 +1,30 @@
 """Utility functions."""
 
-import json
+import random
 from pathlib import Path
 
+import numpy as np
+import torch
 
-def save_memory_stat(run_dir: Path, key: str, value: float | dict) -> None:
-    """Merge a single peak-VRAM measurement into run_dir/memory_stats.json.
 
-    Read-modify-write so pretrain and eval stats (written at different points
-    in the pipeline) accumulate into the same file instead of overwriting each other.
-    """
-    stats_path = Path(run_dir) / "memory_stats.json"
-    stats = {}
-    if stats_path.exists():
-        with open(stats_path) as f:
-            stats = json.load(f)
-    stats[key] = value
-    with open(stats_path, "w") as f:
-        json.dump(stats, f, indent=2)
+def set_randomness_seed(seed):
+    """Set random seed for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def get_default_device() -> torch.device:
+    """Get default torch device."""
+    device = "cpu"
+    if torch.backends.mps.is_available():
+        device = "mps"
+    if torch.cuda.is_available():
+        device = "cuda"
+    return torch.device(device)
 
 
 def load_env(env_path: str | Path = ".env") -> None:

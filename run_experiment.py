@@ -7,20 +7,16 @@ the --activation flag is a placeholder for the next phase.
 
 import argparse
 import json
-from pathlib import Path
 
 import torch
 
-from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.experiment_utils import save_memory_stat, setup_experiment
 from nanotabpfn.train import (
     NanopriorDataset,
     PriorDumpDataLoader,
     eval,
-    get_default_device,
-    set_randomness_seed,
     train,
 )
-from nanotabpfn.utils import save_memory_stat
 
 
 def parse_args(argv=None):
@@ -61,59 +57,7 @@ def parse_args(argv=None):
 def run_experiment(args):
     """Run a single experiment with the given configuration."""
     # Set up output directory
-    run_dir = Path(args.output_dir) / args.activation / f"seed_{args.seed}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_dir = run_dir / "checkpoints"
-
-    # Set seed before anything else
-    set_randomness_seed(args.seed)
-
-    # Create model
-    device = get_default_device()
-    model = NanoTabPFNModel(
-        embedding_size=args.embedding_size,
-        num_attention_heads=args.num_attention_heads,
-        mlp_hidden_size=args.mlp_hidden_size,
-        num_layers=args.num_layers,
-        num_outputs=args.num_outputs,
-        activation=args.activation,
-        gradient_checkpointing=args.gradient_checkpointing,
-    )
-
-    # Save config
-    param_count = sum(p.numel() for p in model.parameters())
-    # Resolve autocast dtype
-    autocast_dtype = None if args.no_autocast else torch.bfloat16
-
-    config = {
-        "activation": args.activation,
-        "benchmark": args.benchmark,
-        "seed": args.seed,
-        "num_steps": args.num_steps,
-        "batch_size": args.batch_size,
-        "lr": args.lr,
-        "eval_every": args.eval_every,
-        "checkpoint_every": args.checkpoint_every,
-        "embedding_size": args.embedding_size,
-        "num_attention_heads": args.num_attention_heads,
-        "mlp_hidden_size": args.mlp_hidden_size,
-        "num_layers": args.num_layers,
-        "num_outputs": args.num_outputs,
-        "max_seq_len": args.max_seq_len,
-        "max_features": args.max_features,
-        "max_classes": args.max_classes,
-        "data_file": args.data_file,
-        "accumulation_steps": args.accumulation_steps,
-        "gradient_checkpointing": args.gradient_checkpointing,
-        "param_count": param_count,
-        "device": str(device),
-        "autocast_dtype": str(autocast_dtype) if autocast_dtype else None,
-    }
-    config_path = run_dir / "config.json"
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
-    print(f"Config saved to {config_path}")
-    print(f"Model parameters: {param_count:,}")
+    run_dir, checkpoint_dir, device, model, autocast_dtype = setup_experiment(args)
 
     # Auto-resume logic
     start_step = 0

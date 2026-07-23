@@ -5,9 +5,9 @@ import json
 import pytest
 import torch
 
+from nanotabpfn.experiment_utils import save_memory_stat
 from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.train import train
-from nanotabpfn.utils import save_memory_stat
 
 
 def test_save_memory_stat_creates_file(tmp_path):
