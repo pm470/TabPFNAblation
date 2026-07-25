@@ -116,6 +116,8 @@ def test_train_writes_pretrain_vram_on_cuda(tmp_path):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")
+@pytest.mark.filterwarnings("ignore::sklearn.exceptions.UndefinedMetricWarning")
+@pytest.mark.filterwarnings("ignore:A single label was found:UserWarning")
 def test_run_experiment_writes_pretrain_and_eval_vram_on_cuda(tmp_path):
     """End-to-end: a real (tiny) run_experiment.py invocation persists both VRAM stats on GPU."""
     from run_experiment import parse_args, run_experiment

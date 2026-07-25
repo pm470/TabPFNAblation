@@ -138,8 +138,13 @@ def _setup_amp_context(device: torch.device, autocast_dtype: torch.dtype | None)
     return amp_context
 
 
-def _run_train_step(model, optimizer, criterion, full_data, device, amp_context, start_step, step, i, prior, accumulation_steps) -> float | None:
-    """Runs a single training step with gradient accumulation. Returns the loss value or None if skipped (e.g., NaN loss)."""
+def _run_train_step(
+    model, optimizer, criterion, full_data, device, amp_context, start_step, step, i, prior, accumulation_steps
+) -> float | None:
+    """Runs a single training step with gradient accumulation.
+
+    Returns the loss value or None if skipped (e.g., NaN loss).
+    """
     train_test_split_index = full_data["train_test_split_index"]
     data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
     targets = full_data["y"].to(device)
@@ -318,7 +323,19 @@ def train(
             step = start_step + i
             step_start_time = time.time()
 
-            total_loss = _run_train_step(model, optimizer, criterion, full_data, device, amp_context, start_step, step, i, prior, accumulation_steps)
+            total_loss = _run_train_step(
+                model,
+                optimizer,
+                criterion,
+                full_data,
+                device,
+                amp_context,
+                start_step,
+                step,
+                i,
+                prior,
+                accumulation_steps,
+            )
 
             if total_loss is None:
                 continue
