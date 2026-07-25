@@ -234,45 +234,66 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
+def get_activation_module(name: str, device=None, dtype=None) -> nn.Module:
+    """Helper to return the PyTorch activation module for a given name."""
+    if name in ["gelu", "ge"]:
+        return nn.GELU()
+    if name in ["relu", "re"]:
+        return nn.ReLU()
+    if name in ["swish", "swi", "silu"]:
+        return nn.SiLU()
+    if name in ["leaky_relu"]:
+        return nn.LeakyReLU()
+    if name in ["prelu"]:
+        return nn.PReLU(device=device, dtype=dtype)
+    if name in ["mish", "mi"]:
+        return nn.Mish()
+    if name in ["identity", "linear", "bilinear"]:
+        return nn.Identity()
+    raise ValueError(f"Unsupported activation: {name}")
+
+
 def create_mlp(
     in_features: int, hidden_features: int, out_features: int, activation: str = "gelu", device=None, dtype=None
 ) -> nn.Module:
     """Factory function to create the appropriate MLP based on the activation type."""
     activation_name = activation.lower().replace(" ", "_")
-    if activation_name in ["swiglu", "bilinear", "geglu"]:
-        return GatedMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
-    return StandardMLP(in_features, hidden_features, out_features, activation_name, device, dtype)
+
+    # Check if it's a gated activation
+    is_gated = activation_name.endswith("glu") or activation_name == "bilinear"
+
+    if is_gated:
+        # Extract the base name (e.g. 'swi' from 'swiglu', 'ge' from 'geglu')
+        gate_act_name = "identity" if activation_name == "bilinear" else activation_name[:-3]
+        gate_act = get_activation_module(gate_act_name, device, dtype)
+        return GatedMLP(in_features, hidden_features, out_features, gate_act, device, dtype)
+
+    act_module = get_activation_module(activation_name, device, dtype)
+    return StandardMLP(in_features, hidden_features, out_features, act_module, device, dtype)
 
 
 class StandardMLP(nn.Module):
     """Standard 2-layer MLP."""
 
     def __init__(
-        self, in_features: int, hidden_features: int, out_features: int, activation: str, device=None, dtype=None
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+        activation_module: nn.Module,
+        device=None,
+        dtype=None,
     ):
         """Initializes the standard MLP layers."""
         super().__init__()
-        self.activation_name = activation
+        self.activation = activation_module
         self.linear1 = nn.Linear(in_features, hidden_features, device=device, dtype=dtype)
         self.linear2 = nn.Linear(hidden_features, out_features, device=device, dtype=dtype)
-        if self.activation_name == "prelu":
-            self.prelu = nn.PReLU(device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Applies the MLP and standard activation function."""
         h = self.linear1(x)
-        if self.activation_name == "gelu":
-            h = F.gelu(h)
-        elif self.activation_name == "relu":
-            h = F.relu(h)
-        elif self.activation_name == "swish":
-            h = F.silu(h)
-        elif self.activation_name == "leaky_relu":
-            h = F.leaky_relu(h)
-        elif self.activation_name == "prelu":
-            h = self.prelu(h)
-        else:
-            raise ValueError(f"Unsupported standard activation: {self.activation_name}")
+        h = self.activation(h)
         return self.linear2(h)
 
 
@@ -280,11 +301,17 @@ class GatedMLP(nn.Module):
     """Dynamically sizes hidden dimensions to maintain parameter count across activations."""
 
     def __init__(
-        self, in_features: int, hidden_features: int, out_features: int, activation: str, device=None, dtype=None
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+        gate_activation_module: nn.Module,
+        device=None,
+        dtype=None,
     ):
         """Initializes the gated MLP layers."""
         super().__init__()
-        self.activation_name = activation
+        self.gate_activation = gate_activation_module
 
         # Baseline params (excluding out bias): in*H + H + H*out
         # Gated params (excluding out bias): 2*(in*H_new + H_new) + H_new*out
@@ -300,14 +327,7 @@ class GatedMLP(nn.Module):
         """Applies the MLP and gated activation function."""
         gate = self.linear_gate(x)
         up = self.linear_up(x)
-        if self.activation_name == "swiglu":
-            gate = F.silu(gate)
-        elif self.activation_name == "geglu":
-            gate = F.gelu(gate)
-        elif self.activation_name == "bilinear":
-            pass
-        else:
-            raise ValueError(f"Unsupported gated activation: {self.activation_name}")
+        gate = self.gate_activation(gate)
         return self.linear_down(gate * up)
 
 
@@ -355,78 +375,68 @@ class NanoTabPFNClassifier:
         self.y_train = y_train
         self.num_classes = max(set(y_train)) + 1
 
-    def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
-        """Creates (x,y), runs it through our PyTorch Model.
+    def _get_subsampled_context(self, max_train_samples: int, seed_offset: int) -> tuple[np.ndarray, np.ndarray]:
+        """Stratified subsample training context if it's too large, fallback to random."""
+        if len(self.X_train) <= max_train_samples:
+            return self.X_train, self.y_train
 
-        Subsamples training data and chunks test data to avoid OOM.
-        Cuts off the classes that didn't appear in the training data
-        and applies softmax to get the probabilities.
-        """
+        try:
+            X_train_sub, _, y_train_sub, _ = train_test_split(
+                self.X_train,
+                self.y_train,
+                train_size=max_train_samples,
+                stratify=self.y_train,
+                random_state=42 + seed_offset,
+            )
+        except ValueError:
+            # Fallback to purely random subset if a class has too few samples to stratify
+            rng = np.random.default_rng(42 + seed_offset)
+            indices = rng.choice(len(self.X_train), max_train_samples, replace=False)
+            X_train_sub = self.X_train[indices]
+            y_train_sub = self.y_train[indices]
+
+        return X_train_sub, y_train_sub  # type: ignore
+
+    def _run_chunked_inference(
+        self, X_train_sub: np.ndarray, y_train_sub: np.ndarray, X_test: np.ndarray, max_test_chunk: int
+    ) -> np.ndarray:
+        """Run inference in chunks to avoid OOM."""
+        all_probs = []
+        for i in range(0, len(X_test), max_test_chunk):
+            X_test_chunk = X_test[i : i + max_test_chunk]
+            x = np.concatenate((X_train_sub, X_test_chunk))
+            y = y_train_sub
+
+            with torch.no_grad():
+                x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
+
+                out = out[:, : self.num_classes]
+                probs = F.softmax(out, dim=1).cpu().numpy()
+                all_probs.append(probs)
+
+        return np.concatenate(all_probs, axis=0)
+
+    def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
+        """Predict probabilities for the test data using ensembles and chunking if necessary."""
         # Determine sequence length limits for subsampling / chunking.
-        # With Flash / Memory-Efficient Attention the full N² matrix is never
-        # materialised, so there is no quadratic memory constraint.  We use a
-        # simple explicit limit instead.  10 000 comfortably covers the largest
-        # nanotabpfn dataset (8 456 train rows).  Datasets exceeding this have
-        # their training context subsampled and test data chunked (lossless).
-        if self.max_train_samples is not None and self.max_total_samples is not None:
-            max_train_samples = self.max_train_samples
-            max_total_samples = self.max_total_samples
-        else:
-            max_seq_len = 10_000
-            max_train_samples = max_seq_len
-            max_total_samples = int(max_seq_len * 1.25)
+        max_train_samples = self.max_train_samples if self.max_train_samples is not None else 10_000
+        max_total_samples = self.max_total_samples if self.max_total_samples is not None else int(10_000 * 1.25)
 
         # 1. Chunk test data
         max_test_chunk = max_total_samples - min(len(self.X_train), max_train_samples)
-        # Fallback in case max_test_chunk is very small or negative
         max_test_chunk = max(100, max_test_chunk)
 
-        all_ensemble_probs = []
-        # If the dataset is small enough, no subsampling is needed.
         # Since nanoTabPFN does not yet do feature/label permutations, running
-        # multiple identical ensembles would be a waste of compute.
-        # Note: We keep this ensembling logic because while pretraining only targets up to 3000 rows
-        # (which easily fits in context), the full TabArena benchmark evaluates on datasets with 10k+ rows,
-        # making ensembling necessary to utilize the full training folds without OOMing.
+        # multiple identical ensembles would be a waste of compute unless we are sub-sampling.
         actual_ensemble_size = self.n_ensemble if len(self.X_train) > max_train_samples else 1
+        all_ensemble_probs = []
 
         for ensemble_idx in range(actual_ensemble_size):
-            if len(self.X_train) > max_train_samples:
-                # 2. Stratified subsample training context if it's too large
-                try:
-                    X_train_sub, _, y_train_sub, _ = train_test_split(
-                        self.X_train,
-                        self.y_train,
-                        train_size=max_train_samples,
-                        stratify=self.y_train,
-                        random_state=42 + ensemble_idx,
-                    )
-                except ValueError:
-                    # Fallback to purely random subset if a class has too few samples to stratify
-                    rng = np.random.default_rng(42 + ensemble_idx)
-                    indices = rng.choice(len(self.X_train), max_train_samples, replace=False)
-                    X_train_sub = self.X_train[indices]
-                    y_train_sub = self.y_train[indices]
-            else:
-                X_train_sub = self.X_train
-                y_train_sub = self.y_train
-
-            all_probs = []
-            for i in range(0, len(X_test), max_test_chunk):
-                X_test_chunk = X_test[i : i + max_test_chunk]
-                x = np.concatenate((X_train_sub, X_test_chunk))
-                y = y_train_sub
-
-                with torch.no_grad():
-                    x_tensor = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
-                    y_tensor = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-                    out = self.model((x_tensor, y_tensor), train_test_split_index=len(X_train_sub)).squeeze(0)
-
-                    out = out[:, : self.num_classes]
-                    probs = F.softmax(out, dim=1).cpu().numpy()
-                    all_probs.append(probs)
-
-            all_ensemble_probs.append(np.concatenate(all_probs, axis=0))
+            X_train_sub, y_train_sub = self._get_subsampled_context(max_train_samples, ensemble_idx)
+            probs = self._run_chunked_inference(X_train_sub, y_train_sub, X_test, max_test_chunk)
+            all_ensemble_probs.append(probs)
 
         # Average probabilities across all ensemble members
         return np.mean(all_ensemble_probs, axis=0)

@@ -496,7 +496,7 @@ def main() -> None:
         plot_width_scaling(ablation_data, output_dir=output_dir, is_mock=args.mock)
     else:
         print(f"\nWarning: {ablation_path} not found. Skipping depth/width plots.")
-        print("Run 'python scripts/generate_mock_data.py' first to generate mock data.")
+        print("Run 'python scripts/data/generate_mock_data.py' first to generate mock data.")
 
     print("\nDone.")
 

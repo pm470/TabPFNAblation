@@ -44,7 +44,7 @@ CHECKPOINT_DIR="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints"
 echo "Starting TabArena Benchmark for final checkpoint in ${CHECKPOINT_DIR}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u scripts/benchmark_model.py \
+UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u scripts/eval/benchmark_model.py \
     --checkpoint "${CHECKPOINT_DIR}/final.pt" \
     --activation "$ACTIVATION" \
     --subset "nanotabpfn" \

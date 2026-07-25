@@ -32,7 +32,7 @@ Copy `.env.example` to `.env` and fill in your cluster connection details. Ensur
 Sync your local code to the cluster (this excludes heavy data/checkpoints automatically):
 
 ```bash
-bash scripts/sync.sh
+bash scripts/cluster/sync.sh
 ```
 
 ### 2. Generate Pretraining Data (Run Once)
@@ -82,5 +82,5 @@ During training, models are periodically evaluated against diverse OpenML datase
 To generate the final training curves and box-and-whisker plots:
 
 ```bash
-uv run python scripts/plot_results.py
+uv run python scripts/eval/plot_results.py
 ```

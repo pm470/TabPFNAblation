@@ -3,7 +3,6 @@
 import contextlib
 import hashlib
 import os
-import random
 import time
 from collections.abc import Iterable, Iterator, Sized
 from pathlib import Path
@@ -19,8 +18,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from nanotabpfn import config
+from nanotabpfn.experiment_utils import save_memory_stat
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
-from nanotabpfn.utils import save_memory_stat
+from nanotabpfn.utils import get_default_device, set_randomness_seed
 
 
 class PriorBatch(TypedDict):
@@ -29,26 +29,6 @@ class PriorBatch(TypedDict):
     x: torch.Tensor
     y: torch.Tensor
     train_test_split_index: int
-
-
-def set_randomness_seed(seed):
-    """Set random seed for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def get_default_device() -> torch.device:
-    """Get default torch device."""
-    device = "cpu"
-    if torch.backends.mps.is_available():
-        device = "mps"
-    if torch.cuda.is_available():
-        device = "cuda"
-    return torch.device(device)
 
 
 def get_eval_datasets():
@@ -90,14 +70,23 @@ def get_eval_datasets():
     if amazon is not None:
         datasets.append(("amazon_employee_access", *amazon))
 
+    if not datasets:
+        raise RuntimeError("Failed to fetch evaluation datasets from OpenML.")
+
     return datasets
+
+
+_real_get_eval_datasets = get_eval_datasets
 
 
 def eval(classifier, datasets=None):
     """Evaluate classifier on datasets."""
     if datasets is None:
         datasets = get_eval_datasets()
+    if not datasets:
+        raise ValueError("No evaluation datasets provided.")
     scores: dict = {"roc_auc": 0.0, "acc": 0.0, "balanced_acc": 0.0, "datasets": {}}
+
     for name, X_train, X_test, y_train, y_test in datasets:
         classifier.fit(X_train, y_train)
         prob = classifier.predict_proba(X_test)
@@ -106,11 +95,16 @@ def eval(classifier, datasets=None):
             prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
         pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
 
-        if prob.shape[1] == 2:
-            prob = prob[:, 1]
-            ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
-        else:
-            ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
+        try:
+            if prob.shape[1] == 2:
+                prob = prob[:, 1]
+                ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
+            else:
+                ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
+            if np.isnan(ds_roc_auc):
+                ds_roc_auc = 0.5
+        except ValueError:
+            ds_roc_auc = 0.5
 
         ds_acc = float(accuracy_score(y_test, pred))
         ds_bal_acc = float(balanced_accuracy_score(y_test, pred))
@@ -143,6 +137,140 @@ def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
     optimizer.eval()
     torch.save(model.state_dict(), os.path.join(checkpoint_dir, filename))
     optimizer.train()
+
+
+def _setup_amp_context(device: torch.device, autocast_dtype: torch.dtype | None):
+    """Set up autocast context for mixed-precision training."""
+    if autocast_dtype is not None and device.type in ("cuda",):
+        amp_context = lambda: torch.autocast(device_type=device.type, dtype=autocast_dtype)  # noqa: E731
+        amp_label = str(autocast_dtype).replace("torch.", "")
+        print(f"[NanoTabPFN] Mixed-precision training enabled: autocast dtype={amp_label}")
+    else:
+        amp_context = contextlib.nullcontext  # type: ignore[assignment]
+        if autocast_dtype is not None and device.type not in ("cuda",):
+            print(f"[NanoTabPFN] Autocast requested but device '{device.type}' not supported, running in float32")
+    return amp_context
+
+
+def _run_train_step(
+    model, optimizer, criterion, full_data, device, amp_context, start_step, step, i, prior, accumulation_steps
+) -> float | None:
+    """Runs a single training step with gradient accumulation.
+
+    Returns the loss value or None if skipped (e.g., NaN loss).
+    """
+    train_test_split_index = full_data["train_test_split_index"]
+    data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
+    targets = full_data["y"].to(device)
+
+    with amp_context():
+        if device.type == "cuda":
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+
+            try:
+                with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
+                    output = model(data, train_test_split_index=train_test_split_index)
+            except RuntimeError as e:
+                if "No available kernel" in str(e) or "math" in str(e).lower():
+                    if step == start_step:
+                        print("\n" + "!" * 80)
+                        print("CRITICAL WARNING: Flash/MemEfficient Attention failed to trigger!")
+                        print("PyTorch is falling back to the math backend. This will materialize the full")
+                        print("N^2 attention matrix and likely cause a massive OOM (e.g. 37+ GB allocated).")
+                        print("Error details:", str(e))
+                        print("!" * 80 + "\n")
+                    output = model(data, train_test_split_index=train_test_split_index)
+                else:
+                    raise e
+        else:
+            output = model(data, train_test_split_index=train_test_split_index)
+
+        targets = targets[:, train_test_split_index:]
+        targets = targets.reshape((-1,)).to(torch.long)
+        output = output.view(-1, output.shape[-1])
+        loss = criterion(output, targets).mean()
+
+    if torch.isnan(loss):
+        print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
+        optimizer.zero_grad()
+        return None
+
+    loss = loss / accumulation_steps
+    loss.backward()
+    total_loss = (loss * accumulation_steps).cpu().detach().item()
+
+    is_last_step = False
+    if isinstance(prior, Sized):
+        is_last_step = (i + 1) == len(prior)
+    elif hasattr(prior, "num_steps"):
+        is_last_step = (i + 1) == getattr(prior, "num_steps")  # noqa: B009
+
+    if (i + 1) % accumulation_steps == 0 or is_last_step:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        optimizer.zero_grad()
+
+    return total_loss
+
+
+def _run_evaluation(
+    model, optimizer, eval_func, device, step, train_time, total_loss, param_count, metrics_file
+) -> tuple[dict, float]:
+    """Runs evaluation, logs metrics, and returns the generated entry and time taken."""
+    eval_start_time = time.time()
+    model.eval()
+    optimizer.eval()
+
+    entry = {
+        "step": step + 1,
+        "wall_time": train_time,
+        "loss": total_loss,
+        "param_count": param_count,
+    }
+
+    if eval_func is not None:
+        classifier = NanoTabPFNClassifier(model, device)
+        scores = eval_func(classifier)
+        entry.update(scores)
+        score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
+        print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
+    else:
+        print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
+
+    if metrics_file is not None:
+        import json
+
+        with open(metrics_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    model.train()
+    optimizer.train()
+    eval_duration = time.time() - eval_start_time
+    return entry, eval_duration
+
+
+def _maybe_save_checkpoint(
+    model, optimizer, checkpoint_dir, step, checkpoint_every, checkpoint_every_minutes, last_checkpoint_time
+) -> float:
+    """Checks the schedule and saves a checkpoint if needed. Returns the updated last_checkpoint_time."""
+    if not checkpoint_dir:
+        return last_checkpoint_time
+
+    time_to_save = False
+    current_wall_time = time.time()
+    if (
+        checkpoint_every_minutes is not None
+        and (current_wall_time - last_checkpoint_time) / 60.0 >= checkpoint_every_minutes
+    ):
+        time_to_save = True
+
+    step_to_save = checkpoint_every is not None and (step + 1) % checkpoint_every == 0
+
+    if time_to_save or step_to_save:
+        _save_checkpoint(model, optimizer, checkpoint_dir, f"step_{step + 1:05d}.pt")
+        return current_wall_time
+
+    return last_checkpoint_time
 
 
 def train(
@@ -190,17 +318,7 @@ def train(
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
 
-    # Set up autocast context for mixed-precision training.
-    # bfloat16 autocast enables FlashAttention (requires bf16/fp16 inputs) while
-    # keeping LayerNorm, softmax, and loss in float32 automatically.
-    if autocast_dtype is not None and device.type in ("cuda",):
-        amp_context = lambda: torch.autocast(device_type=device.type, dtype=autocast_dtype)  # noqa: E731
-        amp_label = str(autocast_dtype).replace("torch.", "")
-        print(f"[NanoTabPFN] Mixed-precision training enabled: autocast dtype={amp_label}")
-    else:
-        amp_context = contextlib.nullcontext  # type: ignore[assignment]
-        if autocast_dtype is not None and device.type not in ("cuda",):
-            print(f"[NanoTabPFN] Autocast requested but device '{device.type}' not supported, running in float32")
+    amp_context = _setup_amp_context(device, autocast_dtype)
 
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
@@ -213,118 +331,43 @@ def train(
     total_eval_time = 0.0
     last_checkpoint_time = time.time()
     param_count = sum(p.numel() for p in model.parameters())
+
     try:
         for i, full_data in enumerate(prior):
             step = start_step + i
             step_start_time = time.time()
-            train_test_split_index = full_data["train_test_split_index"]
-            # if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
-            #    continue
-            data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
-            targets = full_data["y"].to(device)
 
-            with amp_context():
-                # On CUDA, enforce Flash/MemEfficient Attention to prevent silent math backend fallback OOMs.
-                if device.type == "cuda":
-                    from torch.nn.attention import SDPBackend, sdpa_kernel
+            total_loss = _run_train_step(
+                model,
+                optimizer,
+                criterion,
+                full_data,
+                device,
+                amp_context,
+                start_step,
+                step,
+                i,
+                prior,
+                accumulation_steps,
+            )
 
-                    try:
-                        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
-                            output = model(data, train_test_split_index=train_test_split_index)
-                    except RuntimeError as e:
-                        if "No available kernel" in str(e) or "math" in str(e).lower():
-                            if step == start_step:
-                                print("\n" + "!" * 80)
-                                print("CRITICAL WARNING: Flash/MemEfficient Attention failed to trigger!")
-                                print("PyTorch is falling back to the math backend. This will materialize the full")
-                                print("N^2 attention matrix and likely cause a massive OOM (e.g. 37+ GB allocated).")
-                                print("Error details:", str(e))
-                                print("!" * 80 + "\n")
-                            # Fallback to default behavior
-                            output = model(data, train_test_split_index=train_test_split_index)
-                        else:
-                            raise e
-                else:
-                    output = model(data, train_test_split_index=train_test_split_index)
-                targets = targets[:, train_test_split_index:]
-
-                targets = targets.reshape((-1,)).to(torch.long)
-                output = output.view(-1, output.shape[-1])
-
-                loss = criterion(output, targets).mean()
-
-            if torch.isnan(loss):
-                print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
-                optimizer.zero_grad()
+            if total_loss is None:
                 continue
 
-            loss = loss / accumulation_steps
-            loss.backward()
-            total_loss = (loss * accumulation_steps).cpu().detach().item()
-
-            is_last_step = False
-            if isinstance(prior, Sized):
-                is_last_step = (i + 1) == len(prior)
-            elif hasattr(prior, "num_steps"):
-                is_last_step = (i + 1) == getattr(prior, "num_steps")  # noqa: B009
-
-            if (i + 1) % accumulation_steps == 0 or is_last_step:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                optimizer.zero_grad()
-
-            step_train_duration = time.time() - step_start_time
-            train_time += step_train_duration
+            train_time += time.time() - step_start_time
 
             # evaluate
-            if step % steps_per_eval == steps_per_eval - 1 and eval_func is not None:
-                eval_start_time = time.time()
-                model.eval()
-                optimizer.eval()
-
-                classifier = NanoTabPFNClassifier(model, device)
-                scores = eval_func(classifier)
-                entry = {
-                    "step": step + 1,
-                    "wall_time": train_time,
-                    "loss": total_loss,
-                    "param_count": param_count,
-                    **scores,
-                }
+            if step % steps_per_eval == steps_per_eval - 1:
+                entry, eval_duration = _run_evaluation(
+                    model, optimizer, eval_func, device, step, train_time, total_loss, param_count, metrics_file
+                )
                 eval_history.append(entry)
-                if metrics_file is not None:
-                    with open(metrics_file, "a") as f:
-                        import json
-
-                        f.write(json.dumps(entry) + "\n")
-                score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
-                print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
-
-                model.train()
-                optimizer.train()
-                total_eval_time += time.time() - eval_start_time
-            elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
-                entry = {"step": step + 1, "wall_time": train_time, "loss": total_loss, "param_count": param_count}
-                eval_history.append(entry)
-                if metrics_file is not None:
-                    with open(metrics_file, "a") as f:
-                        import json
-
-                        f.write(json.dumps(entry) + "\n")
-                print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
+                total_eval_time += eval_duration
 
             # save checkpoint
-            time_to_save = False
-            if checkpoint_every_minutes is not None:
-                current_wall_time = time.time()
-                if (current_wall_time - last_checkpoint_time) / 60.0 >= checkpoint_every_minutes:
-                    time_to_save = True
-                    last_checkpoint_time = current_wall_time
-
-            step_to_save = checkpoint_every is not None and (step + 1) % checkpoint_every == 0
-
-            if checkpoint_dir and (time_to_save or step_to_save):
-                _save_checkpoint(model, optimizer, checkpoint_dir, f"step_{step + 1:05d}.pt")
+            last_checkpoint_time = _maybe_save_checkpoint(
+                model, optimizer, checkpoint_dir, step, checkpoint_every, checkpoint_every_minutes, last_checkpoint_time
+            )
 
     except KeyboardInterrupt:
         pass
