@@ -70,14 +70,23 @@ def get_eval_datasets():
     if amazon is not None:
         datasets.append(("amazon_employee_access", *amazon))
 
+    if not datasets:
+        raise RuntimeError("Failed to fetch evaluation datasets from OpenML.")
+
     return datasets
+
+
+_real_get_eval_datasets = get_eval_datasets
 
 
 def eval(classifier, datasets=None):
     """Evaluate classifier on datasets."""
     if datasets is None:
         datasets = get_eval_datasets()
+    if not datasets:
+        raise ValueError("No evaluation datasets provided.")
     scores: dict = {"roc_auc": 0.0, "acc": 0.0, "balanced_acc": 0.0, "datasets": {}}
+
     for name, X_train, X_test, y_train, y_test in datasets:
         classifier.fit(X_train, y_train)
         prob = classifier.predict_proba(X_test)
@@ -86,11 +95,16 @@ def eval(classifier, datasets=None):
             prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
         pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
 
-        if prob.shape[1] == 2:
-            prob = prob[:, 1]
-            ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
-        else:
-            ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
+        try:
+            if prob.shape[1] == 2:
+                prob = prob[:, 1]
+                ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
+            else:
+                ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
+            if np.isnan(ds_roc_auc):
+                ds_roc_auc = 0.5
+        except ValueError:
+            ds_roc_auc = 0.5
 
         ds_acc = float(accuracy_score(y_test, pred))
         ds_bal_acc = float(balanced_accuracy_score(y_test, pred))

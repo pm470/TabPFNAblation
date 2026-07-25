@@ -1,11 +1,15 @@
 """Tests for training pipeline and data loading."""
 
+from unittest.mock import MagicMock, patch
+
 import h5py
 import numpy as np
+import pytest
 import torch
 
 from nanotabpfn.model import NanoTabPFNModel
-from nanotabpfn.train import PriorDumpDataLoader, train
+from nanotabpfn.train import PriorDumpDataLoader, _real_get_eval_datasets, train
+from nanotabpfn.train import eval as eval_fn
 
 
 def test_train_without_eval_func():
@@ -348,3 +352,19 @@ def test_final_checkpoint_saves_eval_weights(tmp_path):
     saved_weights = torch.load(ckpt_dir / "final.pt", map_location="cpu", weights_only=True)
     first_key = next(iter(expected_weights))
     assert torch.allclose(expected_weights[first_key], saved_weights[first_key])
+
+
+def test_eval_empty_datasets():
+    """eval() raises ValueError when given an empty dataset list."""
+    mock_classifier = MagicMock()
+    with pytest.raises(ValueError, match="No evaluation datasets provided"):
+        eval_fn(mock_classifier, datasets=[])
+
+
+def test_get_eval_datasets_failure():
+    """get_eval_datasets() raises RuntimeError if all network fetches fail."""
+    with (
+        patch("sklearn.datasets.fetch_openml", side_effect=RuntimeError("Network Error")),
+        pytest.raises(RuntimeError, match="Failed to fetch evaluation datasets from OpenML"),
+    ):
+        _real_get_eval_datasets()
