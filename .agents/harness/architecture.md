@@ -53,5 +53,19 @@ results/
         step_{S}.pt
 ```
 
+### Architecture Ablation (Phase 2)
+
+```
+results_arch/
+  {sweep_axis}/          # layers | hidden | embedding
+    {activation_name}/
+      e{E}_h{H}_l{L}/
+        seed_{N}/
+          config.json
+          metrics.jsonl
+          checkpoints/
+            step_{S}.pt
+```
+
 - Never write results outside this structure
 - Never overwrite existing results — rerun to regenerate

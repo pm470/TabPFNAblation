@@ -55,3 +55,39 @@ Changing any of these invalidates the comparison unless explicitly studying that
 
 - Do not draw conclusions from the development datasets — they are a sanity check only.
 - TabArena runs use the `nanotabpfn` subset for testing, `classification` for final numbers.
+
+## Phase 2: Architecture Ablation (Issue #26)
+
+This phase studies how activations scale with architecture changes. Parameters differ from Phase 1.
+
+### New Baseline (Phase 2)
+- **Embedding Size:** 128
+- **Attention Heads:** 4
+- **MLP Hidden:** 256 (ratio = 2×, up from 1.5× in Phase 1)
+- **Layers:** 3
+- **Outputs:** 10
+
+### Sweep Grid
+| Axis | Values | Fixed params |
+|------|--------|-------------|
+| **Layers** | [1, 2, 3, 4, 6] | E=128, H=256 |
+| **Hidden** | [64, 128, 256, 384, 512] | E=128, L=3 |
+| **Embedding** | [64, 128, 192, 256] | H=256, L=3 |
+
+### Training Configuration (Phase 2)
+- **Steps:** 10,000 forward passes (= 5,000 optimizer steps with accumulation)
+- **Batch Size:** 4 (micro), accumulation_steps=2 (effective batch = 8)
+- **Gradient Checkpointing:** Always enabled
+- **Learning Rate:** 1e-3 (same as Phase 1)
+- **Evaluation:** Quick eval only (3 proxy datasets, every 250 steps)
+- **Checkpointing:** Every 250 steps
+
+### Activations Evaluated
+- GELU (baseline), SwiGLU, Bilinear (top 2 from Phase 1)
+
+### Seeds
+- 3 seeds per configuration (seeds 0, 1, 2)
+- Total: 14 architecture points × 3 activations × 3 seeds = 126 jobs
+
+### Results Directory
+- `results_arch/{sweep_axis}/{activation}/e{E}_h{H}_l{L}/seed_{N}/`

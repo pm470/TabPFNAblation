@@ -9,9 +9,23 @@ from nanotabpfn.model import NanoTabPFNModel
 from nanotabpfn.utils import get_default_device, set_randomness_seed
 
 
+def _build_run_dir(args) -> Path:
+    """Build the run directory path based on the experiment mode.
+
+    For standard activation ablation: ``{output_dir}/{activation}/seed_{seed}/``.
+    For architecture sweep: ``{output_dir}/{sweep_axis}/{activation}/e{E}_h{H}_l{L}/seed_{seed}/``.
+    """
+    base = Path(args.output_dir)
+    arch_sweep = getattr(args, "arch_sweep", None)
+    if arch_sweep:
+        arch_tag = f"e{args.embedding_size}_h{args.mlp_hidden_size}_l{args.num_layers}"
+        return base / arch_sweep / args.activation / arch_tag / f"seed_{args.seed}"
+    return base / args.activation / f"seed_{args.seed}"
+
+
 def setup_experiment(args) -> tuple[Path, Path, torch.device, NanoTabPFNModel, torch.dtype | None]:
     """Sets up the output directory, sets seeds, creates the model, and saves config."""
-    run_dir = Path(args.output_dir) / args.activation / f"seed_{args.seed}"
+    run_dir = _build_run_dir(args)
     run_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_dir = run_dir / "checkpoints"
 

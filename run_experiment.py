@@ -51,6 +51,13 @@ def parse_args(argv=None):
     )
     parser.add_argument("--gradient-checkpointing", action="store_true", help="Enable gradient checkpointing")
     parser.add_argument("--no-autocast", action="store_true", help="Disable bfloat16 autocast (use pure float32)")
+    parser.add_argument(
+        "--arch-sweep",
+        type=str,
+        default=None,
+        choices=["layers", "hidden", "embedding"],
+        help="Architecture sweep axis label. Sets the results subdirectory to results_arch/{sweep_axis}/...",
+    )
     return parser.parse_args(argv)
 
 

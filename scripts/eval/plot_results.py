@@ -9,6 +9,11 @@ Issue #9 plots (with ``--mock`` flag for mock data):
 4. Learning curves for GELU baseline + top-2 best variants
 5. Architecture scaling (depth): layers vs. TabArena Score
 6. Architecture scaling (width): FFN hidden dim (log) vs. Normalized ROC-AUC
+
+Issue #26 architecture ablation plots (with ``--arch`` flag):
+7. Layers scaling: transformer depth vs. ROC-AUC per activation
+8. Hidden scaling: MLP hidden dim (log2) vs. ROC-AUC per activation
+9. Embedding scaling: embedding size vs. ROC-AUC per activation
 """
 
 import argparse
@@ -154,6 +159,94 @@ def load_all_results(results_dir: str = "results") -> dict[str, list[list[dict]]
             all_results[activation_name] = seed_runs
 
     return all_results
+
+
+def load_arch_results(
+    results_dir: str = "results_arch",
+    sweep_axis: str = "layers",
+) -> dict[str, dict[str, list[float]]]:
+    """Load architecture ablation results for a single sweep axis.
+
+    Reads the ``results_arch/{sweep_axis}/{activation}/e{E}_h{H}_l{L}/seed_{N}/``
+    directory structure and extracts the final ROC-AUC from each run's ``metrics.jsonl``.
+
+    Args:
+        results_dir: Root results_arch directory.
+        sweep_axis: One of ``'layers'``, ``'hidden'``, or ``'embedding'``.
+
+    Returns:
+        Dict mapping activation name → dict with keys:
+        - ``'values'``: sorted list of unique parameter values (int)
+        - ``'means'``: list of mean ROC-AUC per value
+        - ``'stds'``: list of std ROC-AUC per value
+    """
+    axis_dir = Path(results_dir) / sweep_axis
+    if not axis_dir.exists():
+        raise FileNotFoundError(f"Architecture results not found: {axis_dir}")
+
+    # Parse: {activation}/{arch_tag}/seed_{N}/metrics.jsonl
+    # arch_tag = e{E}_h{H}_l{L}
+    raw: dict[str, dict[int, list[float]]] = {}  # activation -> {param_value -> [final_aucs]}
+
+    for activation_dir in sorted(axis_dir.iterdir()):
+        if not activation_dir.is_dir():
+            continue
+        act_name = activation_dir.name
+        if act_name not in raw:
+            raw[act_name] = {}
+
+        for arch_dir in sorted(activation_dir.iterdir()):
+            if not arch_dir.is_dir():
+                continue
+            # Parse arch tag: e128_h256_l3
+            tag = arch_dir.name
+            parts = tag.split("_")
+            tag_dict = {}
+            for part in parts:
+                if part.startswith("e"):
+                    tag_dict["e"] = int(part[1:])
+                elif part.startswith("h"):
+                    tag_dict["h"] = int(part[1:])
+                elif part.startswith("l"):
+                    tag_dict["l"] = int(part[1:])
+
+            # Determine the swept parameter value
+            param_map = {"layers": "l", "hidden": "h", "embedding": "e"}
+            param_val = tag_dict.get(param_map.get(sweep_axis, ""), 0)
+
+            for seed_dir in sorted(arch_dir.iterdir()):
+                if not seed_dir.is_dir():
+                    continue
+                metrics_file = seed_dir / "metrics.jsonl"
+                if not metrics_file.exists():
+                    continue
+                # Read final metric entry
+                last_line = None
+                with open(metrics_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            last_line = line
+                if last_line:
+                    entry = json.loads(last_line)
+                    auc = entry.get("roc_auc", float("nan"))
+                    if param_val not in raw[act_name]:
+                        raw[act_name][param_val] = []
+                    raw[act_name][param_val].append(auc)
+
+    # Aggregate into sorted arrays
+    result: dict[str, dict[str, list[float]]] = {}
+    for act_name, value_map in raw.items():
+        sorted_values = sorted(value_map.keys())
+        means = [float(np.nanmean(value_map[v])) for v in sorted_values]
+        stds = [float(np.nanstd(value_map[v])) for v in sorted_values]
+        result[act_name] = {
+            "values": [float(v) for v in sorted_values],
+            "means": means,
+            "stds": stds,
+        }
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +528,165 @@ def plot_width_scaling(
 
 
 # ---------------------------------------------------------------------------
+# Issue #26 architecture ablation plots (read from results_arch/)
+# ---------------------------------------------------------------------------
+
+
+def _plot_arch_scaling(
+    arch_data: dict[str, dict[str, list[float]]],
+    sweep_axis: str,
+    xlabel: str,
+    title: str,
+    output_basename: str,
+    output_dir: str = "plots",
+    log_x: bool = False,
+    is_mock: bool = False,
+) -> None:
+    """Generic architecture scaling plot for one sweep axis.
+
+    Args:
+        arch_data: Output of :func:`load_arch_results` for the given axis.
+        sweep_axis: The sweep axis name (for labelling).
+        xlabel: X-axis label.
+        title: Plot title.
+        output_basename: Filename base (without extension).
+        output_dir: Directory for output files.
+        log_x: If True, use log2 x-axis scaling.
+        is_mock: If True, add a watermark indicating mock data.
+    """
+    sns.set_theme(style=PLOT_STYLE)
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    activations = sorted(arch_data.keys(), key=lambda k: (k != BASELINE_ACTIVATION, k))
+    palette = sns.color_palette("colorblind", len(activations))
+    markers = ["o", "s", "D", "^", "v"]
+
+    for idx, act_name in enumerate(activations):
+        data = arch_data[act_name]
+        x_vals = np.array(data["values"])
+        mean = np.array(data["means"])
+        std = np.array(data["stds"])
+
+        label = ACTIVATION_DISPLAY_NAMES.get(act_name, act_name.upper())
+        if act_name == BASELINE_ACTIVATION:
+            label = f"{label} (Baseline)"
+
+        linestyle = "--" if act_name == BASELINE_ACTIVATION else "-"
+        marker = markers[idx % len(markers)]
+
+        ax.plot(
+            x_vals,
+            mean,
+            label=label,
+            color=palette[idx],
+            linewidth=2,
+            linestyle=linestyle,
+            marker=marker,
+            markersize=8,
+        )
+        ax.fill_between(x_vals, mean - std, mean + std, color=palette[idx], alpha=0.2)
+
+    if log_x:
+        ax.set_xscale("log", base=2)
+        ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+        # Set ticks at the actual data points
+        all_values = set()
+        for data in arch_data.values():
+            all_values.update(int(v) for v in data["values"])
+        ax.set_xticks(sorted(all_values))
+    else:
+        all_values = set()
+        for data in arch_data.values():
+            all_values.update(int(v) for v in data["values"])
+        ax.set_xticks(sorted(all_values))
+
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel("ROC-AUC", fontsize=12)
+    ax.set_title(title, fontsize=14)
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+
+    if is_mock:
+        _add_watermark(ax)
+
+    fig.tight_layout()
+    _save_plot(fig, output_dir, output_basename)
+    plt.close(fig)
+
+
+def plot_arch_layers_scaling(
+    arch_data: dict[str, dict[str, list[float]]],
+    output_dir: str = "plots",
+    is_mock: bool = False,
+) -> None:
+    """Plot transformer depth vs. ROC-AUC for the architecture ablation.
+
+    Args:
+        arch_data: Output of ``load_arch_results(sweep_axis='layers')``.
+        output_dir: Directory for output files.
+        is_mock: If True, add a watermark indicating mock data.
+    """
+    _plot_arch_scaling(
+        arch_data,
+        sweep_axis="layers",
+        xlabel="Number of Transformer Layers",
+        title="Architecture Ablation: Depth Scaling",
+        output_basename="arch_layers_scaling",
+        output_dir=output_dir,
+        log_x=False,
+        is_mock=is_mock,
+    )
+
+
+def plot_arch_hidden_scaling(
+    arch_data: dict[str, dict[str, list[float]]],
+    output_dir: str = "plots",
+    is_mock: bool = False,
+) -> None:
+    """Plot MLP hidden dim vs. ROC-AUC for the architecture ablation.
+
+    Args:
+        arch_data: Output of ``load_arch_results(sweep_axis='hidden')``.
+        output_dir: Directory for output files.
+        is_mock: If True, add a watermark indicating mock data.
+    """
+    _plot_arch_scaling(
+        arch_data,
+        sweep_axis="hidden",
+        xlabel="MLP Hidden Dimension",
+        title="Architecture Ablation: Hidden Width Scaling",
+        output_basename="arch_hidden_scaling",
+        output_dir=output_dir,
+        log_x=True,
+        is_mock=is_mock,
+    )
+
+
+def plot_arch_embedding_scaling(
+    arch_data: dict[str, dict[str, list[float]]],
+    output_dir: str = "plots",
+    is_mock: bool = False,
+) -> None:
+    """Plot embedding size vs. ROC-AUC for the architecture ablation.
+
+    Args:
+        arch_data: Output of ``load_arch_results(sweep_axis='embedding')``.
+        output_dir: Directory for output files.
+        is_mock: If True, add a watermark indicating mock data.
+    """
+    _plot_arch_scaling(
+        arch_data,
+        sweep_axis="embedding",
+        xlabel="Embedding Size",
+        title="Architecture Ablation: Embedding Scaling",
+        output_basename="arch_embedding_scaling",
+        output_dir=output_dir,
+        log_x=False,
+        is_mock=is_mock,
+    )
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -444,6 +696,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate evaluation plots for the ablation study")
     parser.add_argument("--mock", action="store_true", help="Use mock data from results_mock/")
     parser.add_argument("--output-dir", type=str, default="plots", help="Directory for plot output (default: plots)")
+    parser.add_argument("--arch", action="store_true", help="Generate Issue #26 architecture ablation plots")
     return parser.parse_args()
 
 
@@ -497,6 +750,29 @@ def main() -> None:
     else:
         print(f"\nWarning: {ablation_path} not found. Skipping depth/width plots.")
         print("Run 'python scripts/data/generate_mock_data.py' first to generate mock data.")
+
+    # ─── Issue #26: Architecture ablation plots ───
+    if args.arch:
+        arch_results_dir = (
+            os.path.join(
+                os.environ.get("WORKSPACE_DIR", "."),
+                "results_arch",
+            )
+            if not args.mock
+            else "results_arch_mock"
+        )
+
+        for axis, plot_fn in [
+            ("layers", plot_arch_layers_scaling),
+            ("hidden", plot_arch_hidden_scaling),
+            ("embedding", plot_arch_embedding_scaling),
+        ]:
+            try:
+                arch_data = load_arch_results(arch_results_dir, sweep_axis=axis)
+                print(f"\n--- Issue #26: {axis} scaling ---")
+                plot_fn(arch_data, output_dir=output_dir, is_mock=args.mock)
+            except FileNotFoundError:
+                print(f"\nWarning: No {axis} sweep results in {arch_results_dir}. Skipping.")
 
     print("\nDone.")
 
