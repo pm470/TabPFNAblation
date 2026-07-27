@@ -42,7 +42,7 @@ Follow these as reference implementations:
 - Must verify:
   - Output shape matches input shape (or expected gated output shape)
   - All output values are finite (no NaN/Inf)
-  - Correct parameter count for gated variants (SwiGLU, GeGLU, ReGLU must match non-gated param count)
+  - Correct parameter count for gated variants (SwiGLU, ReGLU must match non-gated param count)
 
 ### Experiment Output Tests
 - Verify `config.json`, `metrics.jsonl`, and checkpoint files are created

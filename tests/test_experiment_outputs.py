@@ -105,3 +105,37 @@ def test_checkpoints_created(experiment_output_dir):
     # final.pt must exist
     final_path = checkpoint_dir / "final.pt"
     assert final_path.exists(), "final.pt checkpoint not found"
+
+
+def test_gated_unrestricted_directory_naming(tmp_path):
+    """Gated activations with --gated-unrestricted save to {activation}_unrestricted directory."""
+    args = parse_args(
+        [
+            "--seed",
+            "0",
+            "--num_steps",
+            "1",
+            "--eval_every",
+            "1",
+            "--checkpoint_every",
+            "1",
+            "--output_dir",
+            str(tmp_path),
+            "--activation",
+            "swiglu",
+            "--gated-unrestricted",
+            "--batch_size",
+            "2",
+            "--max_seq_len",
+            "50",
+            "--max_features",
+            "5",
+        ]
+    )
+    run_experiment(args)
+    unrestricted_dir = tmp_path / "swiglu_unrestricted" / "seed_0"
+    assert unrestricted_dir.exists(), f"Expected directory {unrestricted_dir} to exist"
+    assert (unrestricted_dir / "config.json").exists()
+    with open(unrestricted_dir / "config.json") as f:
+        config = json.load(f)
+    assert config.get("gated_unrestricted") is True

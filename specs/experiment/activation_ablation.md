@@ -2,8 +2,8 @@
 id: EXP-001
 title: "Modular Training & Benchmarking Pipeline"
 status: implemented
-module: "benchmark_model.py, sbatch_train.sh, sbatch_benchmark.sh"
-last_synced: 2026-07-10
+module: "benchmark_model.py, sbatch_train.sh, sbatch_benchmark.sh, slurm/submit_chunk.sh"
+last_synced: 2026-07-25
 ---
 
 # Modular Training & Benchmarking Pipeline
@@ -27,10 +27,11 @@ As a researcher, I want a modular, cluster-ready pipeline that separates data lo
 - [x] AC-9: `--checkpoint_every_minutes` (float, default `10.0`) — time-based checkpoint interval.
 - [x] AC-10: `--output_dir` (str, default `"results"`) — base output directory.
 - [x] AC-11: Model architecture args: `--embedding_size` (128), `--num_attention_heads` (4), `--mlp_hidden_size` (192), `--num_layers` (3), `--num_outputs` (10).
+- [x] AC-11.1: `--gated-unrestricted` (bool flag, default `False`) — when set, runs gated activations with standard unrestricted hidden width (192) without parameter matching.
 
 ### Output Directory Structure
 
-- [x] AC-12: Run directory is `{output_dir}/{activation}/seed_{seed}/`.
+- [x] AC-12: Run directory is `{output_dir}/{activation}/seed_{seed}/` or `{output_dir}/{activation}_unrestricted/seed_{seed}/` when `--gated-unrestricted` is set for gated activations.
 - [x] AC-13: `config.json` and `metrics.jsonl` are saved here.
 - [x] AC-14: Checkpoint directory is `{run_dir}/checkpoints/` containing `step_XXXXX.pt` and `final.pt`.
 - [x] AC-15: TabArena evaluations are output to `{run_dir}/tabarena_exp/`.
@@ -47,3 +48,4 @@ As a researcher, I want a modular, cluster-ready pipeline that separates data lo
 - [x] AC-20: Scripts `.env` aware, extracting `WORKSPACE_DIR` if present to cleanly separate code from heavy data.
 - [x] AC-21: `sbatch_train.sh` uses `#SBATCH --array=0-2` to run seeds in parallel.
 - [x] AC-22: `sbatch_benchmark.sh` reads checkpoints from `WORKSPACE_DIR` and evaluates them in parallel arrays.
+- [x] AC-23: `slurm/submit_chunk.sh` supports Chunk 4 for unrestricted gated activations (`swiglu`, `bilinear`) with `GATED_UNRESTRICTED=1`.

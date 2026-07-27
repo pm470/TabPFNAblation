@@ -11,7 +11,12 @@ from nanotabpfn.utils import get_default_device, set_randomness_seed
 
 def setup_experiment(args) -> tuple[Path, Path, torch.device, NanoTabPFNModel, torch.dtype | None]:
     """Sets up the output directory, sets seeds, creates the model, and saves config."""
-    run_dir = Path(args.output_dir) / args.activation / f"seed_{args.seed}"
+    gated_unrestricted = getattr(args, "gated_unrestricted", False)
+    activation_name = args.activation.lower().replace(" ", "_")
+    is_gated = activation_name.endswith("glu") or activation_name == "bilinear"
+
+    act_dir_name = f"{args.activation}_unrestricted" if (is_gated and gated_unrestricted) else args.activation
+    run_dir = Path(args.output_dir) / act_dir_name / f"seed_{args.seed}"
     run_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_dir = run_dir / "checkpoints"
 
@@ -26,6 +31,7 @@ def setup_experiment(args) -> tuple[Path, Path, torch.device, NanoTabPFNModel, t
         num_outputs=args.num_outputs,
         activation=args.activation,
         gradient_checkpointing=args.gradient_checkpointing,
+        gated_unrestricted=gated_unrestricted,
     )
 
     param_count = sum(p.numel() for p in model.parameters())

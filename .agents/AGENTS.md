@@ -39,7 +39,7 @@ If the agent produces output that technically passes verification but doesn't ma
 
 ## Project Context
 
-This is a CS Master's research project (DLL course) investigating whether modern activation functions (e.g., SwiGLU, GeGLU, Mish) can improve tabular foundation models like TabPFN compared to the GELU baseline.
+This is a CS Master's research project (DLL course) investigating whether modern activation functions (e.g., SwiGLU, Mish) can improve tabular foundation models like TabPFN compared to the GELU baseline.
 
 ## Hypothesis
 
@@ -73,7 +73,7 @@ Modern activation functions might yield statistically significant improvements c
 
 ## Key Design Decisions
 
-- **Gated activations (SwiGLU, GeGLU, ReGLU)** will use identical parameter counts to non-gated variants (LLaMA-style `E → 2*(2H/3)` trick) for fair comparison.
+- **Gated activations (SwiGLU, ReGLU)** will use identical parameter counts to non-gated variants (LLaMA-style `E → 2*(2H/3)` trick) for fair comparison.
 - **Seed determinism** is critical: `torch.cuda.manual_seed_all`, `cudnn.deterministic=True`, `cudnn.benchmark=False`. Verified by pytest.
 - Default training: 5000 steps, batch_size=8, lr=1e-3, eval every 250 steps, checkpoint every 250 steps. Using float32 or bfloat16.
 - Model: ~574K params (embedding=128, heads=4, mlp_hidden=192, layers=3, outputs=10). Feature attention is chunked to avoid CUDA grid limits.
