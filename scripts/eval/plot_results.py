@@ -13,6 +13,7 @@ Issue #9 plots (with ``--mock`` flag for mock data):
 
 import argparse
 import json
+import textwrap
 from pathlib import Path
 
 import matplotlib.patheffects as path_effects
@@ -35,6 +36,20 @@ ACTIVATION_DISPLAY_NAMES = {
     "swiglu": "SwiGLU",
     "bilinear": "Bilinear",
 }
+
+
+def _format_activation_display_name(activation_name: str) -> str:
+    """Return a human-friendly display name for an activation key."""
+    if activation_name.endswith("_unrestricted"):
+        base_name = activation_name.removesuffix("_unrestricted")
+        base_display = ACTIVATION_DISPLAY_NAMES.get(base_name, base_name.replace("_", " ").title())
+        return f"{base_display} (Unrestricted)"
+    return ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.replace("_", " ").title())
+
+
+def _wrap_label(label: str, width: int = 14) -> str:
+    """Wrap a label across lines to reduce x-axis overlap."""
+    return "\n".join(textwrap.wrap(label, width=width, break_long_words=False))
 
 
 def _add_watermark(ax: plt.Axes) -> None:
@@ -194,7 +209,7 @@ def plot_bar_chart_with_error_bars(
         act_mean = float(np.nanmean(final_aucs))
         act_std = float(np.nanstd(final_aucs))
 
-        display_name = ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.upper())
+        display_name = _format_activation_display_name(activation_name)
         if activation_name == BASELINE_ACTIVATION:
             baseline_mean = act_mean
             display_name = f"{display_name} (Baseline)"
@@ -211,7 +226,10 @@ def plot_bar_chart_with_error_bars(
 
     fig, ax = plt.subplots(figsize=(10, 6))
     palette = sns.color_palette("deep", len(names))
-    bars = ax.bar(names, means, yerr=stds, capsize=5, color=palette, edgecolor="black", linewidth=0.8)
+    x_positions = np.arange(len(names))
+    bars = ax.bar(x_positions, means, yerr=stds, capsize=5, color=palette, edgecolor="black", linewidth=0.8)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([_wrap_label(name) for name in names], ha="center")
 
     # Find GELU baseline color to match the line
     baseline_color = "black"
