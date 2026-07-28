@@ -1,6 +1,6 @@
 # NanoTabPFN Activation Function Ablation Study
 
-This project investigates whether modern activation functions (SwiGLU, GeGLU, Mish, etc.) improve the performance of tabular foundation models compared to the standard GELU baseline. The codebase is a specialized, distributed fork built on top of [nanoTabPFN](https://github.com/automl/nanoTabPFN).
+This project investigates whether modern activation functions (SwiGLU, Mish, etc.) improve the performance of tabular foundation models compared to the standard GELU baseline. The codebase is a specialized, distributed fork built on top of [nanoTabPFN](https://github.com/automl/nanoTabPFN).
 
 ## Local Setup & Development
 

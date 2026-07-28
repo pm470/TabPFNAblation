@@ -2,7 +2,7 @@
 
 ## Fair Comparison Rules
 
-- **Gated activations** (SwiGLU, GeGLU, ReGLU) must match the parameter count of non-gated variants
+- **Gated activations** (SwiGLU, ReGLU) must match the parameter count of non-gated variants
 - Use the LLaMA-style trick: intermediate size `E → 2 * (2H/3)` so the gated projection has equivalent total parameters
 - If parameter counts diverge, the comparison is invalid — verify with smoke tests before running experiments
 

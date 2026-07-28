@@ -3,7 +3,7 @@ id: CORE-001
 title: "NanoTabPFN Model Architecture"
 status: implemented
 module: model.py
-last_synced: 2026-07-23
+last_synced: 2026-07-25
 ---
 
 # NanoTabPFN Model Architecture
@@ -16,7 +16,7 @@ As a researcher, I want a compact tabular foundation model that encodes features
 
 ## NanoTabPFNModel
 
-- [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, `activation` (default `"gelu"`), and `gradient_checkpointing` (default `False`) as parameters.
+- [x] AC-1: The model constructor accepts `embedding_size`, `num_attention_heads`, `mlp_hidden_size`, `num_layers`, `num_outputs`, `activation` (default `"gelu"`), `gradient_checkpointing` (default `False`), and `gated_unrestricted` (default `False`) as parameters.
 - [x] AC-2: The model contains a `FeatureEncoder`, a `TargetEncoder`, a `nn.ModuleList` of `TransformerEncoderLayer` blocks (length `num_layers`), and a `Decoder`.
 - [x] AC-3: Forward pass accepts a tuple `(x_src, y_src)` and an integer `train_test_split_index`.
 - [x] AC-4: If `y_src` has fewer dimensions than `x_src`, an extra trailing dimension is added via `unsqueeze(-1)`.
@@ -25,7 +25,8 @@ As a researcher, I want a compact tabular foundation model that encodes features
 - [x] AC-7: After the transformer stack, only test-row target embeddings are selected: `src_tensor[:, train_test_split_index:, -1, :]`.
 - [x] AC-8: Output shape is `(batch_size, num_test_rows, num_outputs)` where `num_test_rows = num_rows - train_test_split_index`.
 - [x] AC-9: With default config (embedding_size=128, heads=4, mlp_hidden=192, layers=3, outputs=2) the model has exactly 572,674 parameters.
-- [x] AC-9.1: Gated activations dynamically adjust their inner dimension size to maintain a parameter count as close as possible to the baseline.
+- [x] AC-9.1: Gated activations dynamically adjust their inner dimension size to maintain a parameter count as close as possible to the baseline when `gated_unrestricted` is `False`.
+- [x] AC-9.2: When `gated_unrestricted` is `True`, gated activations use the full specified `mlp_hidden_size` without scaling down the hidden dimension.
 
 ### FeatureEncoder
 

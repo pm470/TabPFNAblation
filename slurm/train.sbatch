@@ -41,18 +41,28 @@ fi
 # Use the SLURM array task ID directly as the seed (0-9)
 SEED=${SLURM_ARRAY_TASK_ID:-0}
 ACTIVATION="${ACTIVATION:-gelu}"
+GATED_UNRESTRICTED="${GATED_UNRESTRICTED:-0}"
 
-echo "Starting training for activation=${ACTIVATION}, seed=${SEED}"
+EXTRA_FLAGS=""
+if [ "$GATED_UNRESTRICTED" == "1" ] || [ "$GATED_UNRESTRICTED" == "true" ]; then
+  DIR_NAME="${ACTIVATION}_unrestricted"
+  EXTRA_FLAGS="--gated-unrestricted"
+else
+  DIR_NAME="${ACTIVATION}"
+fi
+
+echo "Starting training for activation=${ACTIVATION} (dir=${DIR_NAME}), seed=${SEED}"
 echo "Using workspace: ${WORKSPACE_DIR}"
 
-FINAL_CHECKPOINT="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints/final.pt"
+FINAL_CHECKPOINT="${RESULTS_DIR}/${DIR_NAME}/seed_${SEED}/checkpoints/final.pt"
 if [ -f "$FINAL_CHECKPOINT" ]; then
-  echo "Seed ${SEED} for ${ACTIVATION} is already fully trained. Skipping."
+  echo "Seed ${SEED} for ${DIR_NAME} is already fully trained. Skipping."
   exit 0
 fi
 
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u run_experiment.py \
   --activation "$ACTIVATION" \
+  $EXTRA_FLAGS \
   --seed "$SEED" \
   --num_steps 5000 \
   --batch_size 8 \

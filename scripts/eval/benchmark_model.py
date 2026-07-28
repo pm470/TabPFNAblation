@@ -59,6 +59,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_layers", type=int, default=3)
     parser.add_argument("--num_outputs", type=int, default=10)
     parser.add_argument("--activation", type=str, default="gelu")
+    parser.add_argument(
+        "--gated-unrestricted",
+        action="store_true",
+        help="Run gated activations with unrestricted hidden width without scaling down for parameter parity",
+    )
 
     return parser.parse_args()
 
@@ -97,6 +102,7 @@ def main() -> None:
             num_layers=args.num_layers,
             num_outputs=args.num_outputs,
             activation=args.activation,
+            gated_unrestricted=args.gated_unrestricted,
         )
 
         state_dict = torch.load(ckpt_path, map_location=device, weights_only=True)

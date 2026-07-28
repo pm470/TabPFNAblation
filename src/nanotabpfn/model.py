@@ -31,6 +31,7 @@ class NanoTabPFNModel(nn.Module):
         num_outputs: int,
         activation: str = "gelu",
         gradient_checkpointing: bool = False,
+        gated_unrestricted: bool = False,
     ):
         """Initializes the feature/target encoder, transformer stack and decoder."""
         super().__init__()
@@ -46,9 +47,12 @@ class NanoTabPFNModel(nn.Module):
                     mlp_hidden_size,
                     activation=activation,
                     gradient_checkpointing=gradient_checkpointing,
+                    gated_unrestricted=gated_unrestricted,
                 )
             )
-        self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs, activation=activation)
+        self.decoder = Decoder(
+            embedding_size, mlp_hidden_size, num_outputs, activation=activation, gated_unrestricted=gated_unrestricted
+        )
 
     def forward(self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int) -> torch.Tensor:
         """Forward pass for the model."""
@@ -147,6 +151,7 @@ class TransformerEncoderLayer(nn.Module):
         device=None,
         dtype=None,
         gradient_checkpointing: bool = False,
+        gated_unrestricted: bool = False,
     ):
         """Initialize TransformerEncoderLayer."""
         super().__init__()
@@ -159,7 +164,13 @@ class TransformerEncoderLayer(nn.Module):
         )
 
         self.mlp = create_mlp(
-            embedding_size, mlp_hidden_size, embedding_size, activation=activation, device=device, dtype=dtype
+            embedding_size,
+            mlp_hidden_size,
+            embedding_size,
+            activation=activation,
+            device=device,
+            dtype=dtype,
+            gated_unrestricted=gated_unrestricted,
         )
 
         self.norm1 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
@@ -254,7 +265,13 @@ def get_activation_module(name: str, device=None, dtype=None) -> nn.Module:
 
 
 def create_mlp(
-    in_features: int, hidden_features: int, out_features: int, activation: str = "gelu", device=None, dtype=None
+    in_features: int,
+    hidden_features: int,
+    out_features: int,
+    activation: str = "gelu",
+    device=None,
+    dtype=None,
+    gated_unrestricted: bool = False,
 ) -> nn.Module:
     """Factory function to create the appropriate MLP based on the activation type."""
     activation_name = activation.lower().replace(" ", "_")
@@ -263,10 +280,18 @@ def create_mlp(
     is_gated = activation_name.endswith("glu") or activation_name == "bilinear"
 
     if is_gated:
-        # Extract the base name (e.g. 'swi' from 'swiglu', 'ge' from 'geglu')
+        # Extract the base name (e.g. 'swi' from 'swiglu')
         gate_act_name = "identity" if activation_name == "bilinear" else activation_name[:-3]
         gate_act = get_activation_module(gate_act_name, device, dtype)
-        return GatedMLP(in_features, hidden_features, out_features, gate_act, device, dtype)
+        return GatedMLP(
+            in_features,
+            hidden_features,
+            out_features,
+            gate_act,
+            device,
+            dtype,
+            gated_unrestricted=gated_unrestricted,
+        )
 
     act_module = get_activation_module(activation_name, device, dtype)
     return StandardMLP(in_features, hidden_features, out_features, act_module, device, dtype)
@@ -308,16 +333,20 @@ class GatedMLP(nn.Module):
         gate_activation_module: nn.Module,
         device=None,
         dtype=None,
+        gated_unrestricted: bool = False,
     ):
         """Initializes the gated MLP layers."""
         super().__init__()
         self.gate_activation = gate_activation_module
 
-        # Baseline params (excluding out bias): in*H + H + H*out
-        # Gated params (excluding out bias): 2*(in*H_new + H_new) + H_new*out
-        target_params = hidden_features * (in_features + 1 + out_features)
-        gated_divisor = 2 * in_features + 2 + out_features
-        self.hidden_features = round(target_params / gated_divisor)
+        if gated_unrestricted:
+            self.hidden_features = hidden_features
+        else:
+            # Baseline params (excluding out bias): in*H + H + H*out
+            # Gated params (excluding out bias): 2*(in*H_new + H_new) + H_new*out
+            target_params = hidden_features * (in_features + 1 + out_features)
+            gated_divisor = 2 * in_features + 2 + out_features
+            self.hidden_features = round(target_params / gated_divisor)
 
         self.linear_gate = nn.Linear(in_features, self.hidden_features, device=device, dtype=dtype)
         self.linear_up = nn.Linear(in_features, self.hidden_features, device=device, dtype=dtype)
@@ -334,10 +363,23 @@ class GatedMLP(nn.Module):
 class Decoder(nn.Module):
     """Decodes embeddings into logits."""
 
-    def __init__(self, embedding_size: int, mlp_hidden_size: int, num_outputs: int, activation: str = "gelu"):
+    def __init__(
+        self,
+        embedding_size: int,
+        mlp_hidden_size: int,
+        num_outputs: int,
+        activation: str = "gelu",
+        gated_unrestricted: bool = False,
+    ):
         """Initializes the linear layers for use in the forward."""
         super().__init__()
-        self.mlp = create_mlp(embedding_size, mlp_hidden_size, num_outputs, activation=activation)
+        self.mlp = create_mlp(
+            embedding_size,
+            mlp_hidden_size,
+            num_outputs,
+            activation=activation,
+            gated_unrestricted=gated_unrestricted,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Applies an MLP to the embeddings to get the logits.

@@ -37,9 +37,18 @@ fi
 # Use the SLURM array task ID directly as the seed (0-9)
 SEED=${SLURM_ARRAY_TASK_ID:-0}
 ACTIVATION="${ACTIVATION:-gelu}"
+GATED_UNRESTRICTED="${GATED_UNRESTRICTED:-0}"
+
+EXTRA_FLAGS=""
+if [ "$GATED_UNRESTRICTED" == "1" ] || [ "$GATED_UNRESTRICTED" == "true" ]; then
+    DIR_NAME="${ACTIVATION}_unrestricted"
+    EXTRA_FLAGS="--gated-unrestricted"
+else
+    DIR_NAME="${ACTIVATION}"
+fi
 
 # The checkpoint is loaded from the workspace results directory
-CHECKPOINT_DIR="${RESULTS_DIR}/${ACTIVATION}/seed_${SEED}/checkpoints"
+CHECKPOINT_DIR="${RESULTS_DIR}/${DIR_NAME}/seed_${SEED}/checkpoints"
 
 echo "Starting TabArena Benchmark for final checkpoint in ${CHECKPOINT_DIR}"
 echo "Using workspace: ${WORKSPACE_DIR}"
@@ -47,6 +56,7 @@ echo "Using workspace: ${WORKSPACE_DIR}"
 UV_INDEX_STRATEGY="unsafe-best-match" uv run python -u scripts/eval/benchmark_model.py \
     --checkpoint "${CHECKPOINT_DIR}/final.pt" \
     --activation "$ACTIVATION" \
+    $EXTRA_FLAGS \
     --subset "nanotabpfn" \
     --n_ensemble 8
 
