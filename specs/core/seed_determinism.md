@@ -38,7 +38,7 @@ As a researcher, I want full control over random seeds so that experiments are e
 
 ### PriorDumpDataLoader Data Diversity
 
-- [x] AC-15: `PriorDumpDataLoader` with different seeds reads different data slices from the HDF5 file, ensuring that the only shared variance source is not limited to weight initialization.
+- [x] AC-17: `PriorDumpDataLoader` with different seeds reads different data slices from the HDF5 file, ensuring that the only shared variance source is not limited to weight initialization.
 
 ## Notes
 
