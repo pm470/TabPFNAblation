@@ -99,8 +99,8 @@ def plot_relative_improvement(
             edgecolors="none",
         )
 
-    means = [np.mean(v) if v else float("nan") for v in data]
-    stds = [np.std(v) if v else float("nan") for v in data]
+    means = np.array([np.mean(v) if v else float("nan") for v in data])
+    stds = np.array([np.std(v) if v else float("nan") for v in data])
     ax.scatter(range(1, len(labels) + 1), means, marker="D", color="black", s=60, zorder=3, label="Mean")
 
     for i, (mean, std) in enumerate(zip(means, stds, strict=False), start=1):
