@@ -152,10 +152,12 @@ def plot_relative_improvement(
 
     # Add footnote if any unrestricted variants are present
     has_unrestricted = any(name.endswith("*") for name in display_labels)
-    footnote_text = "* = unrestricted parameter count" if has_unrestricted else ""
-    fig.subplots_adjust(bottom=0.22 if has_unrestricted else 0.2)
+    fig.subplots_adjust(bottom=0.25 if has_unrestricted else 0.2)
     if has_unrestricted:
-        fig.text(0.02, 0.01, footnote_text, fontsize=7, fontstyle="italic", color="gray")
+        fig.text(
+            0.02, 0.01, "* = full hidden width (no reduction for parameter parity)",
+            fontsize=10, fontstyle="italic", color="#555555",
+        )
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
