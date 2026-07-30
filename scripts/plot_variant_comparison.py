@@ -6,6 +6,7 @@ across seeds), with the mean marked and annotated below each box.
 """
 
 import argparse
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -129,7 +130,12 @@ def plot_relative_improvement(
 def parse_args(argv=None):
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Plot per-dataset relative improvement over baseline")
-    parser.add_argument("--results_dir", type=str, default="results", help="Base results directory")
+
+    default_results = "/pfs/work9/workspace/scratch/fr_lf453-nanotabpfn_data/results"
+    if "WORKSPACE_DIR" in os.environ:
+        default_results = str(Path(os.environ["WORKSPACE_DIR"]) / "results")
+
+    parser.add_argument("--results_dir", type=str, default=default_results, help="Base results directory")
     parser.add_argument("--baseline", type=str, default="gelu", help="Baseline activation name")
     parser.add_argument("--metric", type=str, default="roc_auc", choices=list(METRICS), help="Metric to plot")
     parser.add_argument("--split", type=str, default="all", choices=["all", "id", "ood"], help="Dataset split")
@@ -141,6 +147,10 @@ def main(argv=None):
     """Compute and plot per-dataset relative improvement for every discovered variant."""
     args = parse_args(argv)
     results_dir = Path(args.results_dir)
+
+    if not results_dir.exists():
+        print(f"Error: Results directory not found: {results_dir}")
+        return
 
     variant_activations = sorted(d.name for d in results_dir.iterdir() if d.is_dir() and d.name != args.baseline)
 
