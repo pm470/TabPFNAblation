@@ -7,20 +7,28 @@ across seeds), with the mean marked and annotated below each box.
 
 import argparse
 import os
+import textwrap
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 from nanotabpfn.analysis import (
     METRICS,
     aggregate_seed_scores,
     compute_relative_improvement,
+    format_activation_display_name,
     load_tabarena_scores,
 )
 
-BASELINE_COLOR = "#4C72B0"
-VARIANT_COLOR = "#55A868"
+PLOT_DPI = 300
+BASELINE_HIGHLIGHT_COLOR = "#4C72B0"
+
+
+def _wrap_label(label: str, width: int = 14) -> str:
+    """Wrap a label across lines to reduce x-axis overlap."""
+    return "\n".join(textwrap.wrap(label, width=width, break_long_words=False))
 
 
 def collect_relative_improvements(
@@ -60,53 +68,65 @@ def plot_relative_improvement(
     series: dict[str, list[float]],
     baseline_activation: str,
     metric: str,
-    output_path: str = "relative_improvement.png",
-):
+    output_dir: str = "plots",
+) -> None:
     """Box-and-whisker plot of per-dataset relative improvement over the baseline.
 
     Each box shows the distribution across datasets; individual dots are
     jittered per-dataset scores; the diamond marks the mean; the label
-    below each box shows mean ± std.
+    below each box shows mean ± std.  Every activation gets a unique color
+    so they are easy to distinguish on a poster.
 
     Args:
         series: Mapping of activation name to per-dataset relative improvement
             percentages, as returned by `collect_relative_improvements`.
-        baseline_activation: Name of the baseline activation, used to color
-            it differently from the variants.
+        baseline_activation: Name of the baseline activation, used to
+            highlight it differently from the variants.
         metric: `"roc_auc"` or `"log_loss"`, used for axis/title labeling.
-        output_path: Where to save the figure.
+        output_dir: Directory to save the figure (PNG + SVG).
     """
-    labels = list(series.keys())
-    data = [series[label] for label in labels]
-    colors = [BASELINE_COLOR if label == baseline_activation else VARIANT_COLOR for label in labels]
+    sns.set_theme(style="whitegrid")
 
-    fig, ax = plt.subplots(figsize=(max(8, len(labels) * 1.3), 6))
+    raw_labels = list(series.keys())
+    display_labels = [format_activation_display_name(l) for l in raw_labels]
+    data = [series[label] for label in raw_labels]
+    palette = sns.color_palette("deep", len(raw_labels))
 
-    bp = ax.boxplot(data, tick_labels=labels, patch_artist=True, showfliers=False, widths=0.5)
-    for patch, color in zip(bp["boxes"], colors, strict=False):
+    fig, ax = plt.subplots(figsize=(max(8, len(raw_labels) * 1.3), 6))
+
+    bp = ax.boxplot(
+        data,
+        tick_labels=[_wrap_label(dl) for dl in display_labels],
+        patch_artist=True,
+        showfliers=False,
+        widths=0.5,
+    )
+    for patch, color in zip(bp["boxes"], palette, strict=False):
         patch.set_facecolor(color)
-        patch.set_alpha(0.5)
+        patch.set_alpha(0.6)
+        patch.set_edgecolor("black")
+        patch.set_linewidth(0.8)
 
     rng = np.random.default_rng(0)
-    for i, (values, color) in enumerate(zip(data, colors, strict=False), start=1):
+    for i, (values, color) in enumerate(zip(data, palette, strict=False), start=1):
         jitter = rng.normal(0, 0.04, size=len(values))
         ax.scatter(
             np.full(len(values), i) + jitter,
             values,
             color=color,
-            alpha=0.5,
-            s=18,
+            alpha=0.6,
+            s=22,
             zorder=2,
             edgecolors="none",
         )
 
     means = np.array([np.mean(v) if v else float("nan") for v in data])
     stds = np.array([np.std(v) if v else float("nan") for v in data])
-    ax.scatter(range(1, len(labels) + 1), means, marker="D", color="black", s=60, zorder=3, label="Mean")
+    ax.scatter(range(1, len(raw_labels) + 1), means, marker="D", color="black", s=60, zorder=3, label="Mean")
 
     for i, (mean, std) in enumerate(zip(means, stds, strict=False), start=1):
         ax.annotate(
-            f"{mean:.2f} ± {std:.1f}%",
+            f"{mean:+.2f} ± {std:.1f}%",
             xy=(i, 0),
             xycoords=("data", "axes fraction"),
             xytext=(0, -28),
@@ -115,15 +135,23 @@ def plot_relative_improvement(
             fontsize=8,
         )
 
+    baseline_display = format_activation_display_name(baseline_activation)
     metric_label = "ROC-AUC" if metric == "roc_auc" else "Log Loss"
-    ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
-    ax.set_ylabel(f"Relative improvement over {baseline_activation} ({metric_label}, %)")
-    ax.set_title(f"Per-dataset relative improvement over {baseline_activation} ({metric_label})")
+    ax.axhline(0, color=BASELINE_HIGHLIGHT_COLOR, linewidth=1.5, linestyle="--", label=f"{baseline_display} baseline")
+    ax.set_ylabel(f"Relative improvement over {baseline_display} ({metric_label}, %)")
+    ax.set_title(f"Per-dataset relative improvement over {baseline_display} ({metric_label})")
     ax.grid(True, alpha=0.3, axis="y")
-    ax.legend(loc="upper left")
+    ax.legend(loc="upper left", fontsize=9)
     fig.subplots_adjust(bottom=0.2)
-    fig.savefig(output_path, dpi=150)
-    print(f"Saved plot to {output_path}")
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    basename = f"relative_improvement_{metric}"
+    png_path = out / f"{basename}.png"
+    svg_path = out / f"{basename}.svg"
+    fig.savefig(png_path, dpi=PLOT_DPI, bbox_inches="tight")
+    fig.savefig(svg_path, bbox_inches="tight")
+    print(f"  Saved: {png_path}, {svg_path}")
     plt.close(fig)
 
 
@@ -139,7 +167,7 @@ def parse_args(argv=None):
     parser.add_argument("--baseline", type=str, default="gelu", help="Baseline activation name")
     parser.add_argument("--metric", type=str, default="roc_auc", choices=list(METRICS), help="Metric to plot")
     parser.add_argument("--split", type=str, default="all", choices=["all", "id", "ood"], help="Dataset split")
-    parser.add_argument("--output_path", type=str, default=None, help="Where to save the figure")
+    parser.add_argument("--output_dir", type=str, default="plots", help="Directory for plot output (default: plots)")
     return parser.parse_args(argv)
 
 
@@ -155,8 +183,7 @@ def main(argv=None):
     variant_activations = sorted(d.name for d in results_dir.iterdir() if d.is_dir() and d.name != args.baseline)
 
     series = collect_relative_improvements(results_dir, args.baseline, variant_activations, args.metric, args.split)
-    output_path = args.output_path or f"relative_improvement_{args.metric}_{args.split}.png"
-    plot_relative_improvement(series, args.baseline, args.metric, output_path)
+    plot_relative_improvement(series, args.baseline, args.metric, args.output_dir)
 
 
 if __name__ == "__main__":

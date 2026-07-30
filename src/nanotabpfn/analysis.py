@@ -15,6 +15,40 @@ METRICS = {
     "log_loss": False,  # lower is better
 }
 
+ACTIVATION_DISPLAY_NAMES: dict[str, str] = {
+    "gelu": "GELU",
+    "relu": "ReLU",
+    "swish": "Swish",
+    "leaky_relu": "Leaky ReLU",
+    "prelu": "PReLU",
+    "swiglu": "SwiGLU",
+    "reglu": "ReGLU",
+    "geglu": "GEGLU",
+    "bilinear": "Bilinear",
+    "mish": "Mish",
+}
+
+
+def format_activation_display_name(activation_name: str) -> str:
+    """Return a human-friendly display name for an activation key.
+
+    Handles the ``_unrestricted`` suffix by stripping it and appending
+    ``(Unr.)`` to the base display name.
+
+    Args:
+        activation_name: Internal activation key (e.g. ``"swiglu"``,
+            ``"bilinear_unrestricted"``).
+
+    Returns:
+        A formatted display name suitable for plot labels.
+    """
+    if activation_name.endswith("_unrestricted"):
+        base_name = activation_name.removesuffix("_unrestricted")
+        base_display = ACTIVATION_DISPLAY_NAMES.get(base_name, base_name.replace("_", " ").title())
+        return f"{base_display} (Unr.)"
+    return ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.replace("_", " ").title())
+
+
 
 def load_tabarena_scores(
     results_dir: Path | str, activation: str, metric: str, split: str = "all"

@@ -21,30 +21,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
+from nanotabpfn.analysis import format_activation_display_name
+
 # Publication-quality defaults
 PLOT_DPI = 300
 PLOT_STYLE = "whitegrid"
 WATERMARK_TEXT = "MOCK DATA — NOT FROM REAL EXPERIMENTS"
 BASELINE_ACTIVATION = "gelu"
-
-ACTIVATION_DISPLAY_NAMES = {
-    "gelu": "GELU",
-    "relu": "ReLU",
-    "swish": "Swish",
-    "leaky_relu": "Leaky ReLU",
-    "prelu": "PReLU",
-    "swiglu": "SwiGLU",
-    "bilinear": "Bilinear",
-}
-
-
-def _format_activation_display_name(activation_name: str) -> str:
-    """Return a human-friendly display name for an activation key."""
-    if activation_name.endswith("_unrestricted"):
-        base_name = activation_name.removesuffix("_unrestricted")
-        base_display = ACTIVATION_DISPLAY_NAMES.get(base_name, base_name.replace("_", " ").title())
-        return f"{base_display} (Unrestricted)"
-    return ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.replace("_", " ").title())
 
 
 def _wrap_label(label: str, width: int = 14) -> str:
@@ -209,7 +192,7 @@ def plot_bar_chart_with_error_bars(
         act_mean = float(np.nanmean(final_aucs))
         act_std = float(np.nanstd(final_aucs))
 
-        display_name = _format_activation_display_name(activation_name)
+        display_name = format_activation_display_name(activation_name)
         if activation_name == BASELINE_ACTIVATION:
             baseline_mean = act_mean
             display_name = f"{display_name} (Baseline)"
@@ -244,7 +227,7 @@ def plot_bar_chart_with_error_bars(
         linestyle="--",
         linewidth=2,
         zorder=2,
-        label=f"{ACTIVATION_DISPLAY_NAMES.get(BASELINE_ACTIVATION, BASELINE_ACTIVATION.upper())} (Baseline)",
+        label=f"{format_activation_display_name(BASELINE_ACTIVATION)} (Baseline)",
     )
     ax.legend(fontsize=11, loc="upper right")
 
@@ -316,7 +299,7 @@ def plot_learning_curves_best(
         mean_auc = np.nanmean(roc_aucs_arr, axis=0)
         std_auc = np.nanstd(roc_aucs_arr, axis=0)
 
-        label = ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.upper())
+        label = format_activation_display_name(activation_name)
         if activation_name == BASELINE_ACTIVATION:
             label = f"{label} (Baseline)"
         label = f"{label} (n={len(seed_runs)})"
@@ -363,7 +346,7 @@ def plot_depth_scaling(
     for idx, (name, values) in enumerate(depth_data["results"].items()):
         mean = np.array(values["mean"])
         std = np.array(values["std"])
-        label = ACTIVATION_DISPLAY_NAMES.get(name, name.upper())
+        label = format_activation_display_name(name)
         if name == BASELINE_ACTIVATION:
             label = f"{label} (Baseline)"
 
@@ -426,7 +409,7 @@ def plot_width_scaling(
     for idx, (name, values) in enumerate(width_data["results"].items()):
         mean = np.array(values["mean"])
         std = np.array(values["std"])
-        label = ACTIVATION_DISPLAY_NAMES.get(name, name.upper())
+        label = format_activation_display_name(name)
         if name == BASELINE_ACTIVATION:
             label = f"{label} (Baseline)"
 
