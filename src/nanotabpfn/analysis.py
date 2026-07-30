@@ -45,9 +45,8 @@ def format_activation_display_name(activation_name: str) -> str:
     if activation_name.endswith("_unrestricted"):
         base_name = activation_name.removesuffix("_unrestricted")
         base_display = ACTIVATION_DISPLAY_NAMES.get(base_name, base_name.replace("_", " ").title())
-        return f"{base_display} (Unr.)"
+        return f"{base_display}*"
     return ACTIVATION_DISPLAY_NAMES.get(activation_name, activation_name.replace("_", " ").title())
-
 
 
 def load_tabarena_scores(

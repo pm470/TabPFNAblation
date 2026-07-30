@@ -88,8 +88,15 @@ def plot_relative_improvement(
     sns.set_theme(style="whitegrid")
 
     raw_labels = list(series.keys())
-    display_labels = [format_activation_display_name(l) for l in raw_labels]
     data = [series[label] for label in raw_labels]
+
+    # Sort by descending mean improvement so best variants are on the left
+    means_for_sort = [float(np.mean(v)) if v else float("nan") for v in data]
+    order = sorted(range(len(raw_labels)), key=lambda i: means_for_sort[i], reverse=True)
+    raw_labels = [raw_labels[i] for i in order]
+    data = [data[i] for i in order]
+
+    display_labels = [format_activation_display_name(name) for name in raw_labels]
     palette = sns.color_palette("deep", len(raw_labels))
 
     fig, ax = plt.subplots(figsize=(max(8, len(raw_labels) * 1.3), 6))
@@ -142,7 +149,13 @@ def plot_relative_improvement(
     ax.set_title(f"Per-dataset relative improvement over {baseline_display} ({metric_label})")
     ax.grid(True, alpha=0.3, axis="y")
     ax.legend(loc="upper left", fontsize=9)
-    fig.subplots_adjust(bottom=0.2)
+
+    # Add footnote if any unrestricted variants are present
+    has_unrestricted = any(name.endswith("*") for name in display_labels)
+    footnote_text = "* = unrestricted parameter count" if has_unrestricted else ""
+    fig.subplots_adjust(bottom=0.22 if has_unrestricted else 0.2)
+    if has_unrestricted:
+        fig.text(0.02, 0.01, footnote_text, fontsize=7, fontstyle="italic", color="gray")
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)

@@ -22,7 +22,7 @@ echo "Source: $REMOTE_DEST"
 
 # Safe Sync Logic:
 # 1. Include all directories so we can search inside them
-# 2. Include ONLY .png (plots), .jsonl (fast eval metrics), and .csv (TabArena results)
+# 2. Include ONLY .png/.svg (plots), .jsonl (fast eval metrics), and .csv (TabArena results)
 # 3. Exclude EVERYTHING else (no .py files, no massive .pt checkpoints, no data)
 rsync -avz --progress \
     --exclude=".venv" \
@@ -31,6 +31,7 @@ rsync -avz --progress \
     --exclude=".pytest_cache" \
     --include="*/" \
     --include="*.png" \
+    --include="*.svg" \
     --include="*.csv" \
     --include="*.jsonl" \
     --exclude="*" \
