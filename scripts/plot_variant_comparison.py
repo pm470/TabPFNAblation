@@ -152,11 +152,12 @@ def plot_relative_improvement(
 
     # Add footnote if any unrestricted variants are present
     has_unrestricted = any(name.endswith("*") for name in display_labels)
-    fig.subplots_adjust(bottom=0.25 if has_unrestricted else 0.2)
+    fig.subplots_adjust(bottom=0.2)
     if has_unrestricted:
         fig.text(
-            0.02, 0.01, "* = full hidden width (no reduction for parameter parity)",
+            0.99, 0.01, "* = full hidden width (no reduction for parameter parity)",
             fontsize=10, fontstyle="italic", color="#555555",
+            ha="right", va="bottom",
         )
 
     out = Path(output_dir)
