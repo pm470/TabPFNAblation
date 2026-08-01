@@ -20,6 +20,8 @@ import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import importlib.util
+import sys
 
 from nanotabpfn.analysis import format_activation_display_name
 
@@ -435,6 +437,30 @@ def plot_width_scaling(
     plt.close(fig)
 
 
+def run_variant_comparison_plot(results_dir: str, output_dir: str, baseline: str = "gelu", metric: str = "roc_auc") -> None:
+    """Dynamically import and run the variant-comparison plotting script.
+
+    This avoids a hard import and keeps the original script as the source
+    of truth for the relative-improvement plot.
+    """
+    mod_path = Path(__file__).parents[1] / "plot_variant_comparison.py"
+    if not mod_path.exists():
+        print(f"Variant comparison script not found: {mod_path}")
+        return
+
+    spec = importlib.util.spec_from_file_location("plot_variant_comparison", str(mod_path))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    # Discover variants (exclude baseline)
+    results_path = Path(results_dir)
+    variant_activations = sorted(d.name for d in results_path.iterdir() if d.is_dir() and d.name != baseline)
+
+    series = module.collect_relative_improvements(results_dir, baseline, variant_activations, metric)
+    module.plot_relative_improvement(series, baseline, metric, output_dir)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -498,6 +524,10 @@ def main() -> None:
     else:
         print(f"\nWarning: {ablation_path} not found. Skipping depth/width plots.")
         print("Run 'python scripts/data/generate_mock_data.py' first to generate mock data.")
+
+    # Variant comparison (relative improvement) plot — always run as part of the full report
+    print("--- Variant comparison: Relative improvement over baseline ---")
+    run_variant_comparison_plot(results_dir, output_dir, baseline=BASELINE_ACTIVATION, metric="roc_auc")
 
     print("\nDone.")
 
