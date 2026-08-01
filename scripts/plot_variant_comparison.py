@@ -10,6 +10,7 @@ import os
 import textwrap
 from pathlib import Path
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -29,6 +30,11 @@ BASELINE_HIGHLIGHT_COLOR = "#4C72B0"
 def _wrap_label(label: str, width: int = 14) -> str:
     """Wrap a label across lines to reduce x-axis overlap."""
     return "\n".join(textwrap.wrap(label, width=width, break_long_words=False))
+
+
+def _normalize_activation_name(name: str) -> str:
+    """Normalize activation names by stripping unrestricted markers."""
+    return name.rstrip("*").strip()
 
 
 def collect_relative_improvements(
@@ -90,14 +96,45 @@ def plot_relative_improvement(
     raw_labels = list(series.keys())
     data = [series[label] for label in raw_labels]
 
-    # Sort by descending mean improvement so best variants are on the left
+    # Group activations into interpretable classes for plotting
+    group_palette = {
+        "Gated": "#55A868",
+        "Smooth": "#4C72B0",
+        "ReLU-family": "#DD8452",
+        "Other": "#7E6148",
+    }
+
+    normalized_labels = [_normalize_activation_name(name) for name in raw_labels]
+
+    def _group_for_activation(name: str) -> str:
+        if "swiglu" in name or "bilinear" in name:
+            return "Gated"
+        if name in {"gelu", "swish"}:
+            return "Smooth"
+        if "relu" in name:
+            return "ReLU-family"
+        return "Other"
+
+    group_labels = [_group_for_activation(name) for name in normalized_labels]
     means_for_sort = [float(np.mean(v)) if v else float("nan") for v in data]
-    order = sorted(range(len(raw_labels)), key=lambda i: means_for_sort[i], reverse=True)
+
+    group_means: dict[str, float] = {}
+    for group in sorted(set(group_labels)):
+        idxs = [i for i, g in enumerate(group_labels) if g == group]
+        group_means[group] = float(np.nanmean([means_for_sort[i] for i in idxs]))
+
+    group_order = sorted(group_means, key=lambda g: group_means[g])
+    order: list[int] = []
+    for group in group_order:
+        group_indices = [i for i, g in enumerate(group_labels) if g == group]
+        order.extend(sorted(group_indices, key=lambda i: means_for_sort[i]))
+
     raw_labels = [raw_labels[i] for i in order]
     data = [data[i] for i in order]
+    group_labels = [group_labels[i] for i in order]
 
     display_labels = [format_activation_display_name(name) for name in raw_labels]
-    palette = sns.color_palette("deep", len(raw_labels))
+    palette = [group_palette[group] for group in group_labels]
 
     fig, ax = plt.subplots(figsize=(max(8, len(raw_labels) * 1.3), 6))
 
@@ -108,6 +145,8 @@ def plot_relative_improvement(
         showfliers=False,
         widths=0.5,
     )
+    ax.set_xticklabels([_wrap_label(dl) for dl in display_labels], rotation=0, ha="center")
+    ax.tick_params(axis="x", labelsize=9)
     for patch, color in zip(bp["boxes"], palette, strict=False):
         patch.set_facecolor(color)
         patch.set_alpha(0.6)
@@ -139,20 +178,52 @@ def plot_relative_improvement(
             xytext=(0, -28),
             textcoords="offset points",
             ha="center",
+            va="top",
+            rotation=0,
             fontsize=8,
         )
 
     baseline_display = format_activation_display_name(baseline_activation)
     metric_label = "ROC-AUC" if metric == "roc_auc" else "Log Loss"
     ax.axhline(0, color=BASELINE_HIGHLIGHT_COLOR, linewidth=1.5, linestyle="--", label=f"{baseline_display} baseline")
-    ax.set_ylabel(f"Relative improvement over {baseline_display} ({metric_label}, %)")
+    ax.set_ylabel(f"Relative improvement (%)")
     ax.set_title(f"Per-dataset relative improvement over {baseline_display} ({metric_label})")
-    ax.grid(True, alpha=0.3, axis="y")
-    ax.legend(loc="upper left", fontsize=9)
+    ax.grid(False)
+
+    # Draw dotted boxes around contiguous groups to visually separate them
+    group_ranges: list[tuple[int, int, str]] = []
+    start_idx = 1
+    current_group = group_labels[0] if group_labels else ""
+    for idx, group in enumerate(group_labels[1:], start=2):
+        if group != current_group:
+            group_ranges.append((start_idx, idx - 1, current_group))
+            start_idx = idx
+            current_group = group
+    if group_labels:
+        group_ranges.append((start_idx, len(group_labels), current_group))
+
+    y_min, y_max = ax.get_ylim()
+    y_padding = (y_max - y_min) * 0.02
+    for start, end, group in group_ranges:
+        rect = mpatches.Rectangle(
+            (start - 0.5, y_min - y_padding),
+            width=end - start + 1,
+            height=(y_max - y_min) + 2 * y_padding,
+            fill=False,
+            edgecolor="#444444",
+            linestyle="--",
+            linewidth=1.0,
+            alpha=0.8,
+            zorder=1,
+        )
+        ax.add_patch(rect)
+
+    group_handles = [mpatches.Patch(color=group_palette[group], label=group) for group in group_order if group in group_labels]
+    ax.legend(handles=group_handles, title="Activation group", fontsize=9, title_fontsize=10, loc="upper left")
 
     # Add footnote if any unrestricted variants are present
     has_unrestricted = any(name.endswith("*") for name in display_labels)
-    fig.subplots_adjust(bottom=0.2)
+    fig.subplots_adjust(bottom=0.16)
     if has_unrestricted:
         fig.text(
             0.99, 0.01, "* = full hidden width (no reduction for parameter parity)",
