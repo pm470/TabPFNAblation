@@ -20,6 +20,7 @@ import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 import importlib.util
 import sys
 
@@ -304,7 +305,7 @@ def plot_learning_curves_best(
         label = format_activation_display_name(activation_name)
         if activation_name == BASELINE_ACTIVATION:
             label = f"{label} (Baseline)"
-        label = f"{label} (n={len(seed_runs)})"
+        label = f"{label}"
 
         linestyle = "--" if activation_name == BASELINE_ACTIVATION else "-"
         ax.plot(steps, mean_auc, label=label, color=palette[idx], linewidth=2, linestyle=linestyle)
@@ -315,6 +316,144 @@ def plot_learning_curves_best(
     ax.set_title("Learning Curves: Baseline vs. Best Variants", fontsize=14)
     ax.legend(fontsize=11, loc="lower right")
     ax.grid(True, alpha=0.3)
+
+    # Force the main plot x-axis to the requested range (500–5000), but
+    # clamp to the actual data range to avoid empty plots when data is smaller.
+    try:
+        steps_arr_all = np.array(steps, dtype=float)
+        global_min = float(np.nanmin(steps_arr_all))
+        global_max = float(np.nanmax(steps_arr_all))
+        xmin_main = max(global_min, 500.0)
+        xmax_main = min(global_max, 5000.0)
+        if xmin_main < xmax_main:
+            ax.set_xlim(xmin_main, xmax_main)
+    except Exception:
+        pass
+
+    # Highlight the dynamic (early) training interval with a shaded
+    # rectangle on the main axes and a separate zoom panel to the right.
+    # Use a fixed zoom window from 500 to 1500 (explicit indices), as requested.
+    # Convert `steps` to a numeric array and locate start/end indices robustly.
+    start_step = 750
+    end_step = 2000
+    try:
+        steps_arr = np.array(steps, dtype=float)
+        start_idx = int(np.searchsorted(steps_arr, start_step, side="left"))
+        end_idx = int(np.searchsorted(steps_arr, end_step, side="right"))
+        # Clamp indices to valid range and ensure at least one element
+        start_idx = max(0, min(start_idx, len(steps_arr) - 1))
+        end_idx = max(start_idx + 1, min(end_idx, len(steps_arr)))
+        zoom_steps = steps[start_idx:end_idx]
+    except Exception:
+        # Fallback: use the original heuristic if something goes wrong
+        start_idx = 0
+        end_idx = max(3, int(len(steps) * 0.2))
+        zoom_steps = steps[start_idx:end_idx]
+
+    # shaded vertical band on the main axes
+    xmin = zoom_steps[0]
+    xmax = zoom_steps[-1]
+    ymin, ymax = ax.get_ylim()
+    ax.axvspan(xmin, xmax, ymin=0, ymax=1.0, color="#dddddd", alpha=0.35, zorder=0)
+
+    # separate zoom panel (small axes on the lower-right)
+    # Create a larger inset and center it inside the main axes. Move it
+    # slightly upward to avoid overlapping the x-axis tick labels and legend
+    # while keeping it visually central.
+    # Make the inset larger and move it upward (centered horizontally,
+    # higher vertically) so it no longer overlaps the x-axis tick labels
+    # and legend. Reduce tick label size inside the inset for clarity.
+    ax_zoom = inset_axes(
+        ax,
+        width="50%",
+        height="50%",
+        bbox_to_anchor=(0.25, 0.05,0.8,0.8),
+        bbox_transform=ax.transAxes,
+        loc="center",
+    )
+    ax_zoom.set_zorder(10)
+    ax_zoom.patch.set_alpha(0.98)
+    ax_zoom.set_facecolor("white")
+    for spine in ax_zoom.spines.values():
+        spine.set_edgecolor("#444444")
+        spine.set_linewidth(0.6)
+    # Reduce inset tick label size and set readable x tick labels
+    ax_zoom.tick_params(axis="both", which="major", labelsize=7)
+    # show three x-ticks: start, middle, end of the zoom window, formatted as integers
+    try:
+        # Place tick marks every 250 steps within the zoom window (user data
+        # is at 250-step resolution). Align ticks to multiples of the
+        # interval so labels read like 500, 750, 1000, ...
+        tick_interval = 250
+        start_val = float(xmin)
+        end_val = float(xmax)
+        first_tick = int(np.ceil(start_val / tick_interval) * tick_interval)
+        candidate_ticks = np.arange(first_tick, end_val + 1, tick_interval)
+        # Ensure ticks lie within the exact zoom bounds (inclusive)
+        ticks = [t for t in candidate_ticks if t >= start_val - 1e-8 and t <= end_val + 1e-8]
+        if len(ticks) == 0:
+            # fallback to start/mid/end
+            zs = list(zoom_steps)
+            if len(zs) == 0:
+                raise ValueError("zoom_steps empty")
+            if len(zs) <= 3:
+                ticks = zs
+            else:
+                idxs = np.linspace(0, len(zs) - 1, 3, dtype=int)
+                ticks = list(np.array(zs)[idxs])
+
+        ax_zoom.set_xticks(ticks)
+        ax_zoom.set_xticklabels([f"{int(round(v))}" for v in ticks], fontsize=7)
+    except Exception:
+        pass
+    for idx, activation_name in enumerate(show_activations):
+        if activation_name not in all_results:
+            continue
+        seed_runs = all_results[activation_name]
+        roc_aucs = [[entry.get("roc_auc", float("nan")) for entry in run] for run in seed_runs]
+        roc_aucs_arr = np.array(roc_aucs)
+        # Slice per-run arrays to the chosen start/end indices for the zoom window
+        mean_auc_zoom = np.nanmean(roc_aucs_arr[:, start_idx:end_idx], axis=0)
+        std_auc_zoom = np.nanstd(roc_aucs_arr[:, start_idx:end_idx], axis=0)
+
+        # interpolate to higher resolution for a smoother, denser zoom view
+        orig_x = np.array(zoom_steps, dtype=float)
+        if orig_x.size >= 2:
+            dense_x = np.linspace(orig_x[0], orig_x[-1], max(120, orig_x.size * 10))
+            mean_interp = np.interp(dense_x, orig_x, mean_auc_zoom)
+            std_interp = np.interp(dense_x, orig_x, std_auc_zoom)
+        else:
+            dense_x = orig_x
+            mean_interp = mean_auc_zoom
+            std_interp = std_auc_zoom
+
+        linestyle = "--" if activation_name == BASELINE_ACTIVATION else "-"
+        ax_zoom.plot(dense_x, mean_interp, color=palette[idx], linewidth=1.6, linestyle=linestyle)
+        ax_zoom.fill_between(dense_x, mean_interp - std_interp, mean_interp + std_interp, alpha=0.12, color=palette[idx])
+
+    ax_zoom.set_xlim(xmin, xmax)
+    # tighten y-limits to the data in the zoom window for better visibility
+    all_zoom_vals = []
+    for activation_name in show_activations:
+        if activation_name not in all_results:
+            continue
+        seed_runs = all_results[activation_name]
+        roc_aucs = [ [entry.get("roc_auc", float("nan")) for entry in run][start_idx:end_idx] for run in seed_runs ]
+        all_zoom_vals.extend(np.concatenate(roc_aucs).tolist())
+    # Force the inset y-limits to the requested range for consistent
+    # comparison and to avoid overlap with main plot tick labels.
+    ax_zoom.set_ylim(0.64, 0.70)
+
+    ax_zoom.set_title("Early dynamic phase", fontsize=9)
+    ax_zoom.tick_params(axis="both", which="major", labelsize=8)
+
+    # Draw a rectangle on the main axes outlining the zoomed region and
+    # connect it to the inset with dashed connector lines. `mark_inset`
+    # uses the inset axes limits to compute the rectangle corners.
+    try:
+        mark_inset(ax, ax_zoom, loc1=1, loc2=3, fc="none", ec="#444444", linestyle=(0, (5, 3)), linewidth=0.4)
+    except Exception:
+        pass
 
     if is_mock:
         _add_watermark(ax)
