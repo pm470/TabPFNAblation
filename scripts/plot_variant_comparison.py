@@ -91,17 +91,16 @@ def plot_relative_improvement(
     data = [series[label] for label in raw_labels]
 
     def get_family(name: str) -> str:
-        n = name.lower().replace("*", "")
+        n = name.lower().removesuffix("_unrestricted").replace("*", "")
         if n.endswith("glu") or n == "bilinear":
             return "Gated"
         if n in ["relu", "leaky_relu", "prelu", "re"]:
             return "ReLU-family"
         return "Smooth"
 
-    # Sort by family and ascending mean improvement
-    family_order = {"Smooth": 0, "ReLU-family": 1, "Gated": 2}
+    # Sort globally by ascending mean improvement
     means_for_sort = [float(np.mean(v)) if v else float("nan") for v in data]
-    order = sorted(range(len(raw_labels)), key=lambda i: (family_order[get_family(raw_labels[i])], means_for_sort[i]))
+    order = sorted(range(len(raw_labels)), key=lambda i: means_for_sort[i])
     raw_labels = [raw_labels[i] for i in order]
     data = [data[i] for i in order]
 
@@ -203,7 +202,7 @@ def plot_relative_improvement(
 
     # SHAPES
     def get_activation_shape(name: str, x: np.ndarray) -> np.ndarray:
-        n = name.lower().replace("*", "")
+        n = name.lower().removesuffix("_unrestricted").replace("*", "")
         import scipy.special
 
         if n in ["relu", "re", "reglu"]:
@@ -215,13 +214,11 @@ def plot_relative_improvement(
         if n in ["mish", "mi", "miglu"]:
             return x * np.tanh(np.log1p(np.exp(x)))
         if n in ["leaky_relu"]:
-            return np.maximum(0.01 * x, x)
+            return np.maximum(0.2 * x, x)  # exaggerated slope for visibility
         if n in ["prelu"]:
             return np.maximum(0.25 * x, x)
-        if n in ["identity", "linear"]:
-            return x
-        if n == "bilinear":
-            return x * x
+        if n in ["identity", "linear", "bilinear"]:
+            return x  # Just plot identity branch for bilinear to avoid confusion
         return np.zeros_like(x)
 
     import matplotlib.transforms as transforms
