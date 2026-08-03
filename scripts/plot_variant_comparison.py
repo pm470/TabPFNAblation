@@ -90,14 +90,29 @@ def plot_relative_improvement(
     raw_labels = list(series.keys())
     data = [series[label] for label in raw_labels]
 
-    # Sort by descending mean improvement so best variants are on the left
+    def get_family(name: str) -> str:
+        n = name.lower().replace("*", "")
+        if n.endswith("glu") or n == "bilinear":
+            return "Gated"
+        if n in ["relu", "leaky_relu", "prelu", "re"]:
+            return "ReLU-family"
+        return "Smooth"
+
+    # Sort by family and ascending mean improvement
+    family_order = {"Smooth": 0, "ReLU-family": 1, "Gated": 2}
     means_for_sort = [float(np.mean(v)) if v else float("nan") for v in data]
-    order = sorted(range(len(raw_labels)), key=lambda i: means_for_sort[i], reverse=True)
+    order = sorted(range(len(raw_labels)), key=lambda i: (family_order[get_family(raw_labels[i])], means_for_sort[i]))
     raw_labels = [raw_labels[i] for i in order]
     data = [data[i] for i in order]
 
     display_labels = [format_activation_display_name(name) for name in raw_labels]
-    palette = sns.color_palette("deep", len(raw_labels))
+
+    family_colors = {
+        "Smooth": sns.color_palette("deep")[0],
+        "ReLU-family": sns.color_palette("deep")[1],
+        "Gated": sns.color_palette("deep")[2],
+    }
+    palette = [family_colors[get_family(label)] for label in raw_labels]
 
     fig, ax = plt.subplots(figsize=(max(8, len(raw_labels) * 1.3), 6))
 
@@ -129,7 +144,7 @@ def plot_relative_improvement(
 
     means = np.array([np.mean(v) if v else float("nan") for v in data])
     stds = np.array([np.std(v) if v else float("nan") for v in data])
-    ax.scatter(range(1, len(raw_labels) + 1), means, marker="D", color="black", s=60, zorder=3, label="Mean")
+    ax.scatter(range(1, len(raw_labels) + 1), means, marker="D", color="black", s=60, zorder=3)
 
     for i, (mean, std) in enumerate(zip(means, stds, strict=False), start=1):
         ax.annotate(
@@ -142,23 +157,88 @@ def plot_relative_improvement(
             fontsize=8,
         )
 
+    ax.annotate(
+        "Mean:",
+        xy=(0.6, 0),
+        xycoords=("data", "axes fraction"),
+        xytext=(0, -28),
+        textcoords="offset points",
+        ha="right",
+        fontsize=9,
+        fontweight="bold",
+    )
+
     baseline_display = format_activation_display_name(baseline_activation)
     metric_label = "ROC-AUC" if metric == "roc_auc" else "Log Loss"
-    ax.axhline(0, color=BASELINE_HIGHLIGHT_COLOR, linewidth=1.5, linestyle="--", label=f"{baseline_display} baseline")
-    ax.set_ylabel(f"Relative improvement over {baseline_display} ({metric_label}, %)")
-    ax.set_title(f"Per-dataset relative improvement over {baseline_display} ({metric_label})")
+    ax.axhline(0, color=BASELINE_HIGHLIGHT_COLOR, linewidth=1.5, linestyle="--")
+    ax.set_ylabel(f"Relative improvement ({metric_label}, %)")
+    ax.set_title(f"Per-dataset relative improvement over {baseline_display} Baseline ({metric_label}, TabArena)")
     ax.grid(True, alpha=0.3, axis="y")
-    ax.legend(loc="upper left", fontsize=9)
+
+    import matplotlib.patches as mpatches
+
+    legend_elements = [
+        mpatches.Patch(facecolor=family_colors["Smooth"], edgecolor="black", label="Smooth", alpha=0.6),
+        mpatches.Patch(facecolor=family_colors["ReLU-family"], edgecolor="black", label="ReLU-family", alpha=0.6),
+        mpatches.Patch(facecolor=family_colors["Gated"], edgecolor="black", label="Gated", alpha=0.6),
+    ]
+    ax.legend(handles=legend_elements, loc="upper left", title="Activation Family", fontsize=9)
 
     # Add footnote if any unrestricted variants are present
     has_unrestricted = any(name.endswith("*") for name in display_labels)
-    fig.subplots_adjust(bottom=0.2)
+    fig.subplots_adjust(bottom=0.3)
     if has_unrestricted:
+        fig.subplots_adjust(right=0.9)
         fig.text(
-            0.99, 0.01, "* = full hidden width (no reduction for parameter parity)",
-            fontsize=10, fontstyle="italic", color="#555555",
-            ha="right", va="bottom",
+            0.92,
+            0.5,
+            "* = full hidden width (no reduction for parameter parity)",
+            fontsize=10,
+            fontstyle="italic",
+            color="#555555",
+            ha="center",
+            va="center",
+            rotation=-90,
         )
+
+    # SHAPES
+    def get_activation_shape(name: str, x: np.ndarray) -> np.ndarray:
+        n = name.lower().replace("*", "")
+        import scipy.special
+
+        if n in ["relu", "re", "reglu"]:
+            return np.maximum(0, x)
+        if n in ["gelu", "ge", "geglu"]:
+            return x * 0.5 * (1.0 + scipy.special.erf(x / np.sqrt(2.0)))
+        if n in ["swish", "swi", "silu", "swiglu"]:
+            return x * scipy.special.expit(x)
+        if n in ["mish", "mi", "miglu"]:
+            return x * np.tanh(np.log1p(np.exp(x)))
+        if n in ["leaky_relu"]:
+            return np.maximum(0.01 * x, x)
+        if n in ["prelu"]:
+            return np.maximum(0.25 * x, x)
+        if n in ["identity", "linear"]:
+            return x
+        if n == "bilinear":
+            return x * x
+        return np.zeros_like(x)
+
+    import matplotlib.transforms as transforms
+
+    trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    for i, (label, color) in enumerate(zip(raw_labels, palette, strict=False), start=1):
+        ax_inset = ax.inset_axes((i - 0.35, -0.28, 0.7, 0.14), transform=trans)
+        x_vals = np.linspace(-3, 3, 100)
+        y_vals = get_activation_shape(label, x_vals)
+        ax_inset.plot(x_vals, y_vals, color=color, linewidth=2)
+        ax_inset.axhline(0, color="gray", linewidth=0.5, linestyle="--")
+        ax_inset.axvline(0, color="gray", linewidth=0.5, linestyle="--")
+        ax_inset.set_xticks([])
+        ax_inset.set_yticks([])
+        for spine in ax_inset.spines.values():
+            spine.set_edgecolor("gray")
+            spine.set_alpha(0.3)
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
