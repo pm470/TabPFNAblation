@@ -12,7 +12,9 @@ Issue #9 plots (with ``--mock`` flag for mock data):
 """
 
 import argparse
+import importlib.util
 import json
+import sys
 import textwrap
 from pathlib import Path
 
@@ -271,7 +273,8 @@ def plot_learning_curves_best(
     """Learning curves for GELU baseline + top-2 best-performing activations.
 
     Shows pre-training steps vs. ROC-AUC with ±1 std shaded
-    uncertainty bands across seeds.
+    uncertainty bands across seeds. Includes an inset axis to zoom in
+    on the early dynamic phase.
 
     Args:
         all_results: Dict mapping activation name → list of seed runs.
@@ -283,6 +286,11 @@ def plot_learning_curves_best(
     show_activations = [BASELINE_ACTIVATION, *top2]
 
     fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Create inset axes for the zoom-in (x, y, width, height) relative to main axes
+    # Placed in the lower-right to avoid the lower-left legend and the top-right curves
+    axins = ax.inset_axes((0.40, 0.08, 0.58, 0.60))
+
     palette = sns.color_palette("colorblind", len(show_activations))
 
     for idx, activation_name in enumerate(show_activations):
@@ -302,17 +310,33 @@ def plot_learning_curves_best(
         label = format_activation_display_name(activation_name)
         if activation_name == BASELINE_ACTIVATION:
             label = f"{label} (Baseline)"
-        label = f"{label} (n={len(seed_runs)})"
 
         linestyle = "--" if activation_name == BASELINE_ACTIVATION else "-"
+
+        # Plot on main axis
         ax.plot(steps, mean_auc, label=label, color=palette[idx], linewidth=2, linestyle=linestyle)
         ax.fill_between(steps, mean_auc - std_auc, mean_auc + std_auc, alpha=0.15, color=palette[idx])
 
+        # Plot the exact same lines on the inset axis
+        axins.plot(steps, mean_auc, color=palette[idx], linewidth=2, linestyle=linestyle)
+        axins.fill_between(steps, mean_auc - std_auc, mean_auc + std_auc, alpha=0.15, color=palette[idx])
+
+    # Configure main axis
+    ax.set_xlim(min(steps), max(steps))
     ax.set_xlabel("Pre-training Step", fontsize=12)
-    ax.set_ylabel("ROC-AUC", fontsize=12)
-    ax.set_title("Learning Curves: Baseline vs. Best Variants", fontsize=14)
-    ax.legend(fontsize=11, loc="lower right")
+    ax.set_ylabel("Average ROC-AUC", fontsize=12)
+    ax.set_title("Learning Curves: Baseline vs. Two Best Variants", fontsize=14)
+    ax.legend(fontsize=11, loc="lower left")  # Moved to lower left
     ax.grid(True, alpha=0.3)
+
+    # Configure inset axis (Early dynamic phase zoom)
+    axins.set_xlim(750, 2000)
+    axins.set_ylim(0.64, 0.70)
+    axins.set_title("Early dynamic phase", fontsize=11, fontweight="bold")
+    axins.grid(True, alpha=0.3)
+
+    # Add connecting lines between the zoomed box and the inset plot
+    ax.indicate_inset_zoom(axins, edgecolor="gray", alpha=0.8, linestyle="--")
 
     if is_mock:
         _add_watermark(ax)
@@ -435,6 +459,34 @@ def plot_width_scaling(
     plt.close(fig)
 
 
+def run_variant_comparison_plot(
+    results_dir: str, output_dir: str, baseline: str = "gelu", metric: str = "roc_auc"
+) -> None:
+    """Dynamically import and run the variant-comparison plotting script.
+
+    This avoids a hard import and keeps the original script as the source
+    of truth for the relative-improvement plot.
+    """
+    mod_path = Path(__file__).parents[1] / "plot_variant_comparison.py"
+    if not mod_path.exists():
+        print(f"Variant comparison script not found: {mod_path}")
+        return
+
+    spec = importlib.util.spec_from_file_location("plot_variant_comparison", str(mod_path))
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    # Discover variants (exclude baseline)
+    results_path = Path(results_dir)
+    variant_activations = sorted(d.name for d in results_path.iterdir() if d.is_dir() and d.name != baseline)
+
+    series = module.collect_relative_improvements(results_dir, baseline, variant_activations, metric)
+    module.plot_relative_improvement(series, baseline, metric, output_dir)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -498,6 +550,10 @@ def main() -> None:
     else:
         print(f"\nWarning: {ablation_path} not found. Skipping depth/width plots.")
         print("Run 'python scripts/data/generate_mock_data.py' first to generate mock data.")
+
+    # Variant comparison (relative improvement) plot — always run as part of the full report
+    print("--- Variant comparison: Relative improvement over baseline ---")
+    run_variant_comparison_plot(results_dir, output_dir, baseline=BASELINE_ACTIVATION, metric="roc_auc")
 
     print("\nDone.")
 

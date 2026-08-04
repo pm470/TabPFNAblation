@@ -3,7 +3,7 @@ id: EVAL-004
 title: "Variant Comparison"
 status: implemented
 module: analysis.py
-last_synced: 2026-07-18
+last_synced: 2026-08-03
 ---
 
 # Variant Comparison
