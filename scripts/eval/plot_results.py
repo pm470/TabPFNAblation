@@ -325,7 +325,7 @@ def plot_learning_curves_best(
     ax.set_xlim(min(steps), max(steps))
     ax.set_xlabel("Pre-training Step", fontsize=12)
     ax.set_ylabel("Average ROC-AUC", fontsize=12)
-    ax.set_title("Learning Curves: Baseline vs. Two Best Variants", fontsize=14)
+    ax.set_title("Learning Curves: Baseline vs. Two Best Variants (proxy datasets)", fontsize=14)
     ax.legend(fontsize=11, loc="lower left")  # Moved to lower left
     ax.grid(True, alpha=0.3)
 
@@ -336,7 +336,9 @@ def plot_learning_curves_best(
     axins.grid(True, alpha=0.3)
 
     # Add connecting lines between the zoomed box and the inset plot
-    ax.indicate_inset_zoom(axins, edgecolor="gray", alpha=0.8, linestyle="--")
+    from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+
+    mark_inset(ax, axins, loc1=3, loc2=1, fc="none", ec="gray", alpha=0.8, linestyle="--")
 
     if is_mock:
         _add_watermark(ax)
