@@ -16,21 +16,44 @@ import json
 import textwrap
 from pathlib import Path
 
-import matplotlib.patheffects as path_effects
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import seaborn as sns
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
-import importlib.util
-import sys
 
-from nanotabpfn.analysis import format_activation_display_name
+from nanotabpfn.analysis import (
+    METRICS,
+    aggregate_seed_scores,
+    compute_relative_improvement,
+    format_activation_display_name,
+    load_tabarena_scores,
+)
 
 # Publication-quality defaults
-PLOT_DPI = 300
+PLOT_DPI = 600
 PLOT_STYLE = "whitegrid"
 WATERMARK_TEXT = "MOCK DATA — NOT FROM REAL EXPERIMENTS"
 BASELINE_ACTIVATION = "gelu"
+
+# Clean, publication-friendly Matplotlib rcParams (apply globally)
+mpl.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["DejaVu Sans", "Arial"],
+        "font.size": 12,
+        "axes.titlesize": 18,
+        "axes.labelsize": 14,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "legend.fontsize": 12,
+        "figure.dpi": PLOT_DPI,
+        "savefig.dpi": PLOT_DPI,
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+    }
+)
 
 
 def _wrap_label(label: str, width: int = 14) -> str:
@@ -49,13 +72,13 @@ def _add_watermark(ax: plt.Axes) -> None:
         0.5,
         WATERMARK_TEXT,
         transform=ax.transAxes,
-        fontsize=16,
+        fontsize=22,
         color="red",
-        alpha=0.35,
+        alpha=0.16,
         ha="center",
         va="center",
         rotation=-30,
-        fontweight="bold",
+        fontweight="normal",
         zorder=999,
     )
 
@@ -73,9 +96,12 @@ def _save_plot(fig: plt.Figure, output_dir: str, basename: str) -> None:
 
     png_path = out_path / f"{basename}.png"
     svg_path = out_path / f"{basename}.svg"
+    pdf_path = out_path / f"{basename}.pdf"
 
     fig.savefig(png_path, dpi=PLOT_DPI, bbox_inches="tight")
     fig.savefig(svg_path, bbox_inches="tight")
+    # Vector PDF for poster printing (fonts embedded via rcParams)
+    fig.savefig(pdf_path, bbox_inches="tight")
     print(f"  Saved: {png_path}, {svg_path}")
 
 
@@ -232,11 +258,11 @@ def plot_bar_chart_with_error_bars(
         zorder=2,
         label=f"{format_activation_display_name(BASELINE_ACTIVATION)} (Baseline)",
     )
-    ax.legend(fontsize=11, loc="upper right")
+    ax.legend(fontsize=12, loc="upper right")
 
-    ax.set_xlabel("Activation Function", fontsize=12)
-    ax.set_ylabel("ROC-AUC", fontsize=12)
-    ax.set_title("ROC-AUC by Activation Function", fontsize=14)
+    ax.set_xlabel("Activation Function", fontsize=14)
+    ax.set_ylabel("ROC-AUC", fontsize=14)
+    ax.set_title("ROC-AUC by Activation Function", fontsize=18)
     y_min = min(m - s for m, s in zip(means, stds, strict=False))
     y_max = max(m + s for m, s in zip(means, stds, strict=False))
     y_range = y_max - y_min
@@ -252,10 +278,9 @@ def plot_bar_chart_with_error_bars(
             f"{mean:.3f}",
             ha="center",
             va="bottom",
-            fontsize=10,
-            fontweight="bold",
+            fontsize=11,
+            fontweight="semibold",
             zorder=4,
-            path_effects=[path_effects.withStroke(linewidth=3, foreground="white")],
         )
 
     if is_mock:
@@ -311,10 +336,13 @@ def plot_learning_curves_best(
         ax.plot(steps, mean_auc, label=label, color=palette[idx], linewidth=2, linestyle=linestyle)
         ax.fill_between(steps, mean_auc - std_auc, mean_auc + std_auc, alpha=0.15, color=palette[idx])
 
-    ax.set_xlabel("Pre-training Step", fontsize=12)
-    ax.set_ylabel("ROC-AUC", fontsize=12)
-    ax.set_title("Learning Curves: Baseline vs. Best Variants", fontsize=14)
+    ax.set_xlabel("Pre-training Step", fontsize=14)
+    ax.set_ylabel("Average ROC-AUC", fontsize=14)
+    ax.set_title("Learning Curves: Baseline vs. Best Variants", fontsize=18)
     ax.legend(fontsize=11, loc="lower right")
+    ax.tick_params(axis="both", which="major", labelsize=11, labelcolor="black")
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontweight("semibold")
     ax.grid(True, alpha=0.3)
 
     # Force the main plot x-axis to the requested range (500–5000), but
@@ -403,7 +431,7 @@ def plot_learning_curves_best(
                 ticks = list(np.array(zs)[idxs])
 
         ax_zoom.set_xticks(ticks)
-        ax_zoom.set_xticklabels([f"{int(round(v))}" for v in ticks], fontsize=7)
+        ax_zoom.set_xticklabels([f"{int(round(v))}" for v in ticks], fontsize=9, fontweight="semibold")
     except Exception:
         pass
     for idx, activation_name in enumerate(show_activations):
@@ -444,8 +472,10 @@ def plot_learning_curves_best(
     # comparison and to avoid overlap with main plot tick labels.
     ax_zoom.set_ylim(0.64, 0.70)
 
-    ax_zoom.set_title("Early dynamic phase", fontsize=9)
-    ax_zoom.tick_params(axis="both", which="major", labelsize=8)
+    ax_zoom.set_title("Early dynamic phase", fontsize=11, fontweight="semibold")
+    ax_zoom.tick_params(axis="both", which="major", labelsize=9)
+    for label in ax_zoom.get_xticklabels() + ax_zoom.get_yticklabels():
+        label.set_fontweight("semibold")
 
     # Draw a rectangle on the main axes outlining the zoomed region and
     # connect it to the inset with dashed connector lines. `mark_inset`
@@ -576,28 +606,218 @@ def plot_width_scaling(
     plt.close(fig)
 
 
-def run_variant_comparison_plot(results_dir: str, output_dir: str, baseline: str = "gelu", metric: str = "roc_auc") -> None:
-    """Dynamically import and run the variant-comparison plotting script.
+def _normalize_activation_name(name: str) -> str:
+    """Normalize activation names by stripping unrestricted markers."""
+    return name.rstrip("*").strip()
 
-    This avoids a hard import and keeps the original script as the source
-    of truth for the relative-improvement plot.
+
+def collect_relative_improvements(
+    results_dir: Path | str,
+    baseline_activation: str,
+    variant_activations: list[str],
+    metric: str,
+    split: str = "all",
+) -> dict[str, list[float]]:
+    """Compute per-dataset relative improvement (%) for the baseline and each variant.
+
+    Args:
+        results_dir: Base results directory (e.g. `results/`).
+        baseline_activation: Baseline activation name (e.g. `"gelu"`).
+        variant_activations: Activation names to compare against the baseline.
+        metric: `"roc_auc"` or `"log_loss"`.
+        split: Which datasets to include (`"all"`, `"id"`, or `"ood"`).
+
+    Returns:
+        Mapping of activation name to a list of per-dataset relative
+        improvement percentages. The baseline is included as an all-zero
+        reference series, matching the baseline-vs-itself convention used
+        in relative-improvement plots.
     """
-    mod_path = Path(__file__).parents[1] / "plot_variant_comparison.py"
-    if not mod_path.exists():
-        print(f"Variant comparison script not found: {mod_path}")
-        return
+    higher_is_better = METRICS[metric]
+    baseline_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, baseline_activation, metric, split))
 
-    spec = importlib.util.spec_from_file_location("plot_variant_comparison", str(mod_path))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    series = {baseline_activation: [0.0] * len(baseline_scores)}
+    for variant in variant_activations:
+        variant_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, variant, metric, split))
+        improvements = compute_relative_improvement(baseline_scores, variant_scores, higher_is_better)
+        series[variant] = [100 * v for v in improvements.values()]
+    return series
 
-    # Discover variants (exclude baseline)
-    results_path = Path(results_dir)
-    variant_activations = sorted(d.name for d in results_path.iterdir() if d.is_dir() and d.name != baseline)
 
-    series = module.collect_relative_improvements(results_dir, baseline, variant_activations, metric)
-    module.plot_relative_improvement(series, baseline, metric, output_dir)
+def plot_relative_improvement(
+    series: dict[str, list[float]],
+    baseline_activation: str,
+    metric: str,
+    output_dir: str = "plots",
+) -> None:
+    """Box-and-whisker plot of per-dataset relative improvement over the baseline.
+
+    Each box shows the distribution across datasets; individual dots are
+    jittered per-dataset scores; the diamond marks the mean; the label
+    below each box shows mean ± std.  Every activation gets a unique color
+    so they are easy to distinguish on a poster.
+
+    Args:
+        series: Mapping of activation name to per-dataset relative improvement
+            percentages, as returned by `collect_relative_improvements`.
+        baseline_activation: Name of the baseline activation, used to
+            highlight it differently from the variants.
+        metric: `"roc_auc"` or `"log_loss"`, used for axis/title labeling.
+        output_dir: Directory to save the figure (PNG + SVG).
+    """
+    sns.set_theme(style="whitegrid")
+
+    raw_labels = list(series.keys())
+    data = [series[label] for label in raw_labels]
+
+    group_palette = {
+        "Gated": "#55A868",
+        "Smooth": "#4C72B0",
+        "ReLU-family": "#DD8452",
+        "Other": "#7E6148",
+    }
+
+    normalized_labels = [_normalize_activation_name(name) for name in raw_labels]
+
+    def _group_for_activation(name: str) -> str:
+        if "swiglu" in name or "bilinear" in name:
+            return "Gated"
+        if name in {"gelu", "swish"}:
+            return "Smooth"
+        if "relu" in name:
+            return "ReLU-family"
+        return "Other"
+
+    group_labels = [_group_for_activation(name) for name in normalized_labels]
+    means_for_sort = [float(np.mean(v)) if v else float("nan") for v in data]
+
+    group_means: dict[str, float] = {}
+    for group in sorted(set(group_labels)):
+        idxs = [i for i, g in enumerate(group_labels) if g == group]
+        group_means[group] = float(np.nanmean([means_for_sort[i] for i in idxs]))
+
+    group_order = sorted(group_means, key=lambda g: group_means[g])
+    order: list[int] = []
+    for group in group_order:
+        group_indices = [i for i, g in enumerate(group_labels) if g == group]
+        order.extend(sorted(group_indices, key=lambda i: means_for_sort[i]))
+
+    raw_labels = [raw_labels[i] for i in order]
+    data = [data[i] for i in order]
+    group_labels = [group_labels[i] for i in order]
+
+    display_labels = [format_activation_display_name(name) for name in raw_labels]
+    palette = [group_palette[group] for group in group_labels]
+
+    fig, ax = plt.subplots(figsize=(max(8, len(raw_labels) * 1.3), 6))
+
+    bp = ax.boxplot(
+        data,
+        tick_labels=[_wrap_label(dl) for dl in display_labels],
+        patch_artist=True,
+        showfliers=False,
+        widths=0.5,
+    )
+    ax.set_xticklabels([_wrap_label(dl) for dl in display_labels], rotation=0, ha="center")
+    ax.tick_params(axis="x", labelsize=9)
+    for label in ax.get_xticklabels():
+        label.set_fontweight("semibold")
+    for patch, color in zip(bp["boxes"], palette, strict=False):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+        patch.set_edgecolor("black")
+        patch.set_linewidth(0.8)
+
+    rng = np.random.default_rng(0)
+    for i, (values, color) in enumerate(zip(data, palette, strict=False), start=1):
+        jitter = rng.normal(0, 0.04, size=len(values))
+        ax.scatter(
+            np.full(len(values), i) + jitter,
+            values,
+            color=color,
+            alpha=0.6,
+            s=22,
+            zorder=2,
+            edgecolors="none",
+        )
+
+    means = np.array([np.mean(v) if v else float("nan") for v in data])
+    stds = np.array([np.std(v) if v else float("nan") for v in data])
+    ax.scatter(range(1, len(raw_labels) + 1), means, marker="D", color="black", s=60, zorder=3, label="Mean")
+
+    for i, (mean, std) in enumerate(zip(means, stds, strict=False), start=1):
+        ax.annotate(
+            f"{mean:+.2f} ± {std:.1f}%",
+            xy=(i, 0),
+            xycoords=("data", "axes fraction"),
+            xytext=(0, -28),
+            textcoords="offset points",
+            ha="center",
+            va="top",
+            rotation=0,
+            fontsize=9,
+            fontweight="semibold",
+        )
+
+    baseline_display = format_activation_display_name(baseline_activation)
+    metric_label = " Average ROC-AUC" if metric == "roc_auc" else "Log Loss"
+    baseline_line_color = "#000000"
+    ax.axhline(0, color=baseline_line_color, linewidth=1.5, linestyle="--", label=f"{baseline_display} baseline")
+    ax.set_ylabel(f"Relative improvement over {baseline_display} ({metric_label})(%)", fontsize=11.5)
+    ax.set_title(f"Per-dataset Relative Improvement", fontsize=18)
+    ax.grid(False)
+    ax.tick_params(axis="both", which="major", labelsize=9, labelcolor="black")
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontweight("semibold")
+
+    group_ranges: list[tuple[int, int, str]] = []
+    start_idx = 1
+    current_group = group_labels[0] if group_labels else ""
+    for idx, group in enumerate(group_labels[1:], start=2):
+        if group != current_group:
+            group_ranges.append((start_idx, idx - 1, current_group))
+            start_idx = idx
+            current_group = group
+    if group_labels:
+        group_ranges.append((start_idx, len(group_labels), current_group))
+
+    y_min, y_max = ax.get_ylim()
+    y_padding = (y_max - y_min) * 0.02
+    for start, end, group in group_ranges:
+        rect = mpatches.Rectangle(
+            (start - 0.5, y_min - y_padding),
+            width=end - start + 1,
+            height=(y_max - y_min) + 2 * y_padding,
+            fill=False,
+            edgecolor="#444444",
+            linestyle="--",
+            linewidth=1.0,
+            alpha=0.8,
+            zorder=1,
+        )
+        ax.add_patch(rect)
+
+    group_handles = [mpatches.Patch(color=group_palette[group], label=group) for group in group_order if group in group_labels]
+    ax.legend(handles=group_handles, title="Activation group", fontsize=9, title_fontsize=10, loc="upper left")
+
+    has_unrestricted = any(name.endswith("*") for name in display_labels)
+    if has_unrestricted:
+        fig.subplots_adjust(bottom=0.12)
+        fig.text(
+            0.92, 0.5, "* = full hidden width (no reduction for parameter parity)",
+            fontsize=10, fontstyle="italic", color="#555555",
+            ha="right", va="center", rotation=90,
+        )
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    basename = f"relative_improvement_{metric}"
+    png_path = out / f"{basename}.png"
+    svg_path = out / f"{basename}.svg"
+    fig.savefig(png_path, dpi=PLOT_DPI, bbox_inches="tight")
+    fig.savefig(svg_path, bbox_inches="tight")
+    print(f"  Saved: {png_path}, {svg_path}")
+    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
@@ -666,7 +886,10 @@ def main() -> None:
 
     # Variant comparison (relative improvement) plot — always run as part of the full report
     print("--- Variant comparison: Relative improvement over baseline ---")
-    run_variant_comparison_plot(results_dir, output_dir, baseline=BASELINE_ACTIVATION, metric="roc_auc")
+    results_path = Path(results_dir)
+    variant_activations = sorted(d.name for d in results_path.iterdir() if d.is_dir() and d.name != BASELINE_ACTIVATION)
+    series = collect_relative_improvements(results_dir, BASELINE_ACTIVATION, variant_activations, "roc_auc")
+    plot_relative_improvement(series, BASELINE_ACTIVATION, "roc_auc", output_dir)
 
     print("\nDone.")
 
