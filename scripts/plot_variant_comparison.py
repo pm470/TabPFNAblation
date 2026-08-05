@@ -37,7 +37,7 @@ def collect_relative_improvements(
     variant_activations: list[str],
     metric: str,
     split: str = "all",
-) -> dict[str, list[float]]:
+) -> tuple[dict[str, dict[str, float]], set[str]]:
     """Compute per-dataset relative improvement (%) for the baseline and each variant.
 
     Args:
@@ -48,24 +48,28 @@ def collect_relative_improvements(
         split: Which datasets to include (`"all"`, `"id"`, or `"ood"`).
 
     Returns:
-        Mapping of activation name to a list of per-dataset relative
-        improvement percentages. The baseline is included as an all-zero
-        reference series, matching the baseline-vs-itself convention used
-        in relative-improvement plots.
+        A tuple of (series, id_tasks):
+        - series: Mapping of activation name to a dict of task_id to relative
+          improvement percentages.
+        - id_tasks: A set of task_ids that belong to the ID split.
     """
     higher_is_better = METRICS[metric]
     baseline_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, baseline_activation, metric, split))
 
-    series = {baseline_activation: [0.0] * len(baseline_scores)}
+    baseline_scores_id = aggregate_seed_scores(load_tabarena_scores(results_dir, baseline_activation, metric, "id"))
+    id_tasks = set(baseline_scores_id.keys())
+
+    series = {baseline_activation: {k: 0.0 for k in baseline_scores}}
     for variant in variant_activations:
         variant_scores = aggregate_seed_scores(load_tabarena_scores(results_dir, variant, metric, split))
         improvements = compute_relative_improvement(baseline_scores, variant_scores, higher_is_better)
-        series[variant] = [100 * v for v in improvements.values()]
-    return series
+        series[variant] = {k: 100 * v for k, v in improvements.items()}
+    return series, id_tasks
 
 
 def plot_relative_improvement(
-    series: dict[str, list[float]],
+    series: dict[str, dict[str, float]],
+    id_tasks: set[str],
     baseline_activation: str,
     metric: str,
     output_dir: str = "plots",
@@ -79,7 +83,9 @@ def plot_relative_improvement(
 
     Args:
         series: Mapping of activation name to per-dataset relative improvement
-            percentages, as returned by `collect_relative_improvements`.
+            percentages (dict of task_id to float), as returned by
+            `collect_relative_improvements`.
+        id_tasks: Set of task_ids that belong to the ID split.
         baseline_activation: Name of the baseline activation, used to
             highlight it differently from the variants.
         metric: `"roc_auc"` or `"log_loss"`, used for axis/title labeling.
@@ -88,7 +94,8 @@ def plot_relative_improvement(
     sns.set_theme(style="whitegrid")
 
     raw_labels = list(series.keys())
-    data = [series[label] for label in raw_labels]
+    data_dicts = [series[label] for label in raw_labels]
+    data = [list(d.values()) for d in data_dicts]
 
     def get_family(name: str) -> str:
         n = name.lower().removesuffix("_unrestricted").replace("*", "")
@@ -102,6 +109,7 @@ def plot_relative_improvement(
     means_for_sort = [float(np.mean(v)) if v else float("nan") for v in data]
     order = sorted(range(len(raw_labels)), key=lambda i: means_for_sort[i])
     raw_labels = [raw_labels[i] for i in order]
+    data_dicts = [data_dicts[i] for i in order]
     data = [data[i] for i in order]
 
     display_labels = [format_activation_display_name(name) for name in raw_labels]
@@ -129,17 +137,38 @@ def plot_relative_improvement(
         patch.set_linewidth(0.8)
 
     rng = np.random.default_rng(0)
-    for i, (values, color) in enumerate(zip(data, palette, strict=False), start=1):
+    for i, (values_dict, color) in enumerate(zip(data_dicts, palette, strict=False), start=1):
+        task_ids = list(values_dict.keys())
+        values = list(values_dict.values())
         jitter = rng.normal(0, 0.04, size=len(values))
-        ax.scatter(
-            np.full(len(values), i) + jitter,
-            values,
-            color=color,
-            alpha=0.6,
-            s=22,
-            zorder=2,
-            edgecolors="none",
-        )
+        x_pos = np.full(len(values), i) + jitter
+
+        id_mask = [t in id_tasks for t in task_ids]
+        ood_mask = [not m for m in id_mask]
+
+        if any(id_mask):
+            ax.scatter(
+                np.array(x_pos)[id_mask],
+                np.array(values)[id_mask],
+                color=color,
+                alpha=0.6,
+                s=22,
+                zorder=2,
+                edgecolors="none",
+                marker="o",
+            )
+
+        if any(ood_mask):
+            ax.scatter(
+                np.array(x_pos)[ood_mask],
+                np.array(values)[ood_mask],
+                color=color,
+                alpha=0.8,
+                s=28,
+                zorder=2,
+                edgecolors="none",
+                marker="^",
+            )
 
     means = np.array([np.mean(v) if v else float("nan") for v in data])
     stds = np.array([np.std(v) if v else float("nan") for v in data])
@@ -174,6 +203,7 @@ def plot_relative_improvement(
     ax.set_title(f"Per-dataset relative improvement over {baseline_display} Baseline ({metric_label}, TabArena)")
     ax.grid(True, alpha=0.3, axis="y")
 
+    import matplotlib.lines as mlines
     import matplotlib.patches as mpatches
 
     legend_elements = [
@@ -181,7 +211,14 @@ def plot_relative_improvement(
         mpatches.Patch(facecolor=family_colors["ReLU-family"], edgecolor="black", label="ReLU-family", alpha=0.6),
         mpatches.Patch(facecolor=family_colors["Gated"], edgecolor="black", label="Gated", alpha=0.6),
     ]
-    ax.legend(handles=legend_elements, loc="upper left", title="Activation Family", fontsize=9)
+    leg1 = ax.legend(handles=legend_elements, loc="upper left", title="Activation Family", fontsize=9)
+    ax.add_artist(leg1)
+
+    shape_elements = [
+        mlines.Line2D([], [], color="gray", marker="o", linestyle="None", markersize=6, alpha=0.6, label="ID Dataset"),
+        mlines.Line2D([], [], color="gray", marker="^", linestyle="None", markersize=6, alpha=0.8, label="OOD Dataset"),
+    ]
+    ax.legend(handles=shape_elements, loc="upper right", title="Dataset Split", fontsize=9)
 
     # Add footnote if any unrestricted variants are present
     has_unrestricted = any(name.endswith("*") for name in display_labels)
@@ -275,8 +312,10 @@ def main(argv=None):
 
     variant_activations = sorted(d.name for d in results_dir.iterdir() if d.is_dir() and d.name != args.baseline)
 
-    series = collect_relative_improvements(results_dir, args.baseline, variant_activations, args.metric, args.split)
-    plot_relative_improvement(series, args.baseline, args.metric, args.output_dir)
+    series, id_tasks = collect_relative_improvements(
+        results_dir, args.baseline, variant_activations, args.metric, args.split
+    )
+    plot_relative_improvement(series, id_tasks, args.baseline, args.metric, args.output_dir)
 
 
 if __name__ == "__main__":

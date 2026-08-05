@@ -3,7 +3,7 @@ id: EVAL-003
 title: "Results Plotting"
 status: implemented
 module: plot_results.py, generate_mock_data.py
-last_synced: 2026-08-04
+last_synced: 2026-08-05
 ---
 
 # Results Plotting
@@ -73,6 +73,7 @@ As a researcher, I want to visualize training curves and final evaluation metric
 - [x] AC-62: Embeds inset plots showing the 1D mathematical shape for each activation below its label (e.g., $y=x$ for Bilinear, exaggerated slope for Leaky ReLU).
 - [x] AC-63: Vertically aligns a footnote on the right side of the plot for unrestricted variants (`*`).
 - [x] AC-64: Automatically executed as part of the main `plot_results.py` evaluation suite via dynamic import.
+- [x] AC-65: Distinguishes between ID and OOD datasets using different shapes (circles for ID, triangles for OOD) and includes a secondary legend for the dataset split.
 
 ### Mock Data Watermark
 - [x] AC-51: All plot functions accept an `is_mock: bool` parameter (default `False`).

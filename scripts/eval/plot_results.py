@@ -485,8 +485,8 @@ def run_variant_comparison_plot(
     results_path = Path(results_dir)
     variant_activations = sorted(d.name for d in results_path.iterdir() if d.is_dir() and d.name != baseline)
 
-    series = module.collect_relative_improvements(results_dir, baseline, variant_activations, metric)
-    module.plot_relative_improvement(series, baseline, metric, output_dir)
+    series, id_tasks = module.collect_relative_improvements(results_dir, baseline, variant_activations, metric)
+    module.plot_relative_improvement(series, id_tasks, baseline, metric, output_dir)
 
 
 # ---------------------------------------------------------------------------
