@@ -1,0 +1,568 @@
+"""Training loops and data loading."""
+
+import contextlib
+import hashlib
+import os
+import time
+from collections.abc import Iterable, Iterator, Sized
+from pathlib import Path
+from typing import TypedDict
+
+import h5py
+import numpy as np
+import schedulefree
+import torch
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+from torch import nn
+from torch.utils.data import DataLoader
+
+from nanotabpfn import config
+from nanotabpfn.experiment_utils import save_memory_stat
+from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.utils import get_default_device, set_randomness_seed
+
+
+class PriorBatch(TypedDict):
+    """A single batch of synthetic prior data."""
+
+    x: torch.Tensor
+    y: torch.Tensor
+    train_test_split_index: int
+
+
+def get_eval_datasets():
+    """Returns a list of (X_train, X_test, y_train, y_test) tuples for evaluation."""
+    import numpy as np
+    import pandas as pd
+    from sklearn.datasets import fetch_openml
+    from sklearn.preprocessing import LabelEncoder
+
+    datasets = []
+
+    def fetch_and_prep(name, subsample_n=None):
+        try:
+            X, y = fetch_openml(name, version=1, parser="auto", return_X_y=True)
+
+            # Simple conversion for ablation eval
+            if isinstance(X, pd.DataFrame):
+                X = X.copy()
+                for col in X.select_dtypes(include=["category", "object"]).columns:
+                    X[col] = X[col].astype("category").cat.codes
+                X = X.fillna(0).values.astype(np.float32)
+
+            y = np.array(LabelEncoder().fit_transform(y), dtype=np.int64)
+
+            if subsample_n and len(X) > subsample_n:
+                _, X, _, y = train_test_split(X, y, test_size=subsample_n, stratify=y, random_state=42)
+
+            return train_test_split(X, y, test_size=0.5, random_state=42)
+        except Exception as e:
+            print(f"Failed to fetch/prep {name}: {e}")
+            return None
+
+    for d in ["diabetes", "blood-transfusion-service-center"]:
+        res = fetch_and_prep(d)
+        if res is not None:
+            datasets.append((d, *res))
+
+    amazon = fetch_and_prep("amazon_employee_access", subsample_n=2000)
+    if amazon is not None:
+        datasets.append(("amazon_employee_access", *amazon))
+
+    if not datasets:
+        raise RuntimeError("Failed to fetch evaluation datasets from OpenML.")
+
+    return datasets
+
+
+_real_get_eval_datasets = get_eval_datasets
+
+
+def eval(classifier, datasets=None):
+    """Evaluate classifier on datasets."""
+    if datasets is None:
+        datasets = get_eval_datasets()
+    if not datasets:
+        raise ValueError("No evaluation datasets provided.")
+    scores: dict = {"roc_auc": 0.0, "acc": 0.0, "balanced_acc": 0.0, "datasets": {}}
+
+    for name, X_train, X_test, y_train, y_test in datasets:
+        classifier.fit(X_train, y_train)
+        prob = classifier.predict_proba(X_test)
+        if np.isnan(prob).any():
+            print("Warning: NaN predictions detected during eval. Replacing with uniform probabilities.")
+            prob = np.nan_to_num(prob, nan=1.0 / prob.shape[1])
+        pred = prob.argmax(axis=1)  # avoid a second forward pass by not calling predict
+
+        try:
+            if prob.shape[1] == 2:
+                prob = prob[:, 1]
+                ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr"))
+            else:
+                ds_roc_auc = float(roc_auc_score(y_test, prob, multi_class="ovr", labels=np.arange(prob.shape[1])))
+            if np.isnan(ds_roc_auc):
+                ds_roc_auc = 0.5
+        except ValueError:
+            ds_roc_auc = 0.5
+
+        ds_acc = float(accuracy_score(y_test, pred))
+        ds_bal_acc = float(balanced_accuracy_score(y_test, pred))
+
+        scores["datasets"][name] = {"roc_auc": ds_roc_auc, "acc": ds_acc, "balanced_acc": ds_bal_acc}
+
+        scores["roc_auc"] += ds_roc_auc
+        scores["acc"] += ds_acc
+        scores["balanced_acc"] += ds_bal_acc
+
+    scores["roc_auc"] /= len(datasets)
+    scores["acc"] /= len(datasets)
+    scores["balanced_acc"] /= len(datasets)
+    return scores
+
+
+def _save_checkpoint(model, optimizer, checkpoint_dir, filename):
+    """Save a checkpoint with eval-mode (averaged) weights.
+
+    Switches the optimizer to eval mode (swapping in averaged weights),
+    saves the model state_dict, then switches back to train mode.
+
+    Args:
+        model: The model whose state_dict to save.
+        optimizer: The AdamWScheduleFree optimizer.
+        checkpoint_dir: Directory to save the checkpoint file.
+        filename: Name of the checkpoint file (e.g., 'step_01000.pt' or 'final.pt').
+    """
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    optimizer.eval()
+    torch.save(model.state_dict(), os.path.join(checkpoint_dir, filename))
+    optimizer.train()
+
+
+def _setup_amp_context(device: torch.device, autocast_dtype: torch.dtype | None):
+    """Set up autocast context for mixed-precision training."""
+    if autocast_dtype is not None and device.type in ("cuda",):
+        amp_context = lambda: torch.autocast(device_type=device.type, dtype=autocast_dtype)  # noqa: E731
+        amp_label = str(autocast_dtype).replace("torch.", "")
+        print(f"[NanoTabPFN] Mixed-precision training enabled: autocast dtype={amp_label}")
+    else:
+        amp_context = contextlib.nullcontext  # type: ignore[assignment]
+        if autocast_dtype is not None and device.type not in ("cuda",):
+            print(f"[NanoTabPFN] Autocast requested but device '{device.type}' not supported, running in float32")
+    return amp_context
+
+
+def _run_train_step(
+    model, optimizer, criterion, full_data, device, amp_context, start_step, step, i, prior, accumulation_steps
+) -> float | None:
+    """Runs a single training step with gradient accumulation.
+
+    Returns the loss value or None if skipped (e.g., NaN loss).
+    """
+    train_test_split_index = full_data["train_test_split_index"]
+    data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
+    targets = full_data["y"].to(device)
+
+    with amp_context():
+        if device.type == "cuda":
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+
+            try:
+                with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
+                    output = model(data, train_test_split_index=train_test_split_index)
+            except RuntimeError as e:
+                if "No available kernel" in str(e) or "math" in str(e).lower():
+                    if step == start_step:
+                        print("\n" + "!" * 80)
+                        print("CRITICAL WARNING: Flash/MemEfficient Attention failed to trigger!")
+                        print("PyTorch is falling back to the math backend. This will materialize the full")
+                        print("N^2 attention matrix and likely cause a massive OOM (e.g. 37+ GB allocated).")
+                        print("Error details:", str(e))
+                        print("!" * 80 + "\n")
+                    output = model(data, train_test_split_index=train_test_split_index)
+                else:
+                    raise e
+        else:
+            output = model(data, train_test_split_index=train_test_split_index)
+
+        targets = targets[:, train_test_split_index:]
+        targets = targets.reshape((-1,)).to(torch.long)
+        output = output.view(-1, output.shape[-1])
+        loss = criterion(output, targets).mean()
+
+    if torch.isnan(loss):
+        print(f"Warning: NaN loss detected at step {step + 1}. Skipping batch.")
+        optimizer.zero_grad()
+        return None
+
+    loss = loss / accumulation_steps
+    loss.backward()
+    total_loss = (loss * accumulation_steps).cpu().detach().item()
+
+    is_last_step = False
+    if isinstance(prior, Sized):
+        is_last_step = (i + 1) == len(prior)
+    elif hasattr(prior, "num_steps"):
+        is_last_step = (i + 1) == getattr(prior, "num_steps")  # noqa: B009
+
+    if (i + 1) % accumulation_steps == 0 or is_last_step:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        optimizer.zero_grad()
+
+    return total_loss
+
+
+def _run_evaluation(
+    model, optimizer, eval_func, device, step, train_time, total_loss, param_count, metrics_file
+) -> tuple[dict, float]:
+    """Runs evaluation, logs metrics, and returns the generated entry and time taken."""
+    eval_start_time = time.time()
+    model.eval()
+    optimizer.eval()
+
+    entry = {
+        "step": step + 1,
+        "wall_time": train_time,
+        "loss": total_loss,
+        "param_count": param_count,
+    }
+
+    if eval_func is not None:
+        classifier = NanoTabPFNClassifier(model, device)
+        scores = eval_func(classifier)
+        entry.update(scores)
+        score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items() if isinstance(v, (float, int))])
+        print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
+    else:
+        print(f"step {step + 1:5d} | time {train_time:7.1f}s | loss {total_loss:7.4f}")
+
+    if metrics_file is not None:
+        import json
+
+        with open(metrics_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    model.train()
+    optimizer.train()
+    eval_duration = time.time() - eval_start_time
+    return entry, eval_duration
+
+
+def _maybe_save_checkpoint(
+    model, optimizer, checkpoint_dir, step, checkpoint_every, checkpoint_every_minutes, last_checkpoint_time
+) -> float:
+    """Checks the schedule and saves a checkpoint if needed. Returns the updated last_checkpoint_time."""
+    if not checkpoint_dir:
+        return last_checkpoint_time
+
+    time_to_save = False
+    current_wall_time = time.time()
+    if (
+        checkpoint_every_minutes is not None
+        and (current_wall_time - last_checkpoint_time) / 60.0 >= checkpoint_every_minutes
+    ):
+        time_to_save = True
+
+    step_to_save = checkpoint_every is not None and (step + 1) % checkpoint_every == 0
+
+    if time_to_save or step_to_save:
+        _save_checkpoint(model, optimizer, checkpoint_dir, f"step_{step + 1:05d}.pt")
+        return current_wall_time
+
+    return last_checkpoint_time
+
+
+def train(
+    model: NanoTabPFNModel,
+    prior: Iterable[PriorBatch],
+    lr: float = 1e-4,
+    device: torch.device | None = None,
+    steps_per_eval=10,
+    eval_func=None,
+    checkpoint_dir: str | None = None,
+    checkpoint_every: int | None = None,
+    checkpoint_every_minutes: float | None = None,
+    start_step: int = 0,
+    accumulation_steps: int = 1,
+    autocast_dtype: torch.dtype | None = torch.bfloat16,
+    metrics_file: str | Path | None = None,
+) -> tuple[NanoTabPFNModel, list[dict]]:
+    """Trains our model on the given prior using the given criterion.
+
+    Args:
+        model: (NanoTabPFNModel) our PyTorch model
+        prior: (DataLoader) torch-compatible dataloader
+        lr: (float) learning rate
+        device: (torch.device) the device we are using
+        steps_per_eval: (int) how many steps we wait before running evaluation again
+        eval_func: a function that takes in a classifier and returns a dict containing the average scores
+                   for some metrics and datasets
+        checkpoint_dir: (str|None) directory to save model checkpoints to
+        checkpoint_every: (int|None) save a checkpoint every N steps
+        checkpoint_every_minutes: (float|None) save a checkpoint every N minutes
+        start_step: (int) the starting step to offset logging when resuming
+        accumulation_steps: (int) number of steps to accumulate gradients over
+        autocast_dtype: (torch.dtype|None) dtype for torch.autocast during forward/loss.
+                        Default torch.bfloat16 enables FlashAttention. None disables autocast.
+        metrics_file: (str|Path|None) path to a JSONL file to stream evaluation metrics dynamically.
+
+    Returns:
+        (model) our trained numpy model
+        (list) a list containing our eval history, each entry is a dict with
+               step, wall_time, loss, param_count, and scores
+    """
+    if not device:
+        device = get_default_device()
+    model.to(device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+
+    amp_context = _setup_amp_context(device, autocast_dtype)
+
+    optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
+    criterion = nn.CrossEntropyLoss()
+
+    model.train()
+    optimizer.train()
+
+    train_time = 0
+    eval_history = []
+    total_eval_time = 0.0
+    last_checkpoint_time = time.time()
+    param_count = sum(p.numel() for p in model.parameters())
+
+    try:
+        for i, full_data in enumerate(prior):
+            step = start_step + i
+            step_start_time = time.time()
+
+            total_loss = _run_train_step(
+                model,
+                optimizer,
+                criterion,
+                full_data,
+                device,
+                amp_context,
+                start_step,
+                step,
+                i,
+                prior,
+                accumulation_steps,
+            )
+
+            if total_loss is None:
+                continue
+
+            train_time += time.time() - step_start_time
+
+            # evaluate
+            if step % steps_per_eval == steps_per_eval - 1:
+                entry, eval_duration = _run_evaluation(
+                    model, optimizer, eval_func, device, step, train_time, total_loss, param_count, metrics_file
+                )
+                eval_history.append(entry)
+                total_eval_time += eval_duration
+
+            # save checkpoint
+            last_checkpoint_time = _maybe_save_checkpoint(
+                model, optimizer, checkpoint_dir, step, checkpoint_every, checkpoint_every_minutes, last_checkpoint_time
+            )
+
+    except KeyboardInterrupt:
+        pass
+
+    # save final checkpoint
+    if checkpoint_dir:
+        _save_checkpoint(model, optimizer, checkpoint_dir, "final.pt")
+
+    if device.type == "cuda":
+        peak_mem_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
+        print(f"[NanoTabPFN] Pretraining peak GPU memory allocated: {peak_mem_gb:.2f} GB")
+        if checkpoint_dir:
+            # checkpoint_dir is run_dir/checkpoints, so memory_stats.json lives alongside config.json
+            save_memory_stat(Path(checkpoint_dir).parent, "peak_vram_pretrain_gb", peak_mem_gb)
+
+    if total_eval_time > 0:
+        print(f"[NanoTabPFN] Total inline eval time: {total_eval_time:.1f}s")
+
+    return model, eval_history
+
+
+def _seed_to_offset(seed: int, dataset_size: int) -> int:
+    """Compute a deterministic starting offset from a seed.
+
+    Uses SHA-256 hashing to distribute seeds uniformly across the dataset,
+    avoiding the clustering that simple modulo would cause with consecutive seeds.
+
+    Args:
+        seed: The random seed.
+        dataset_size: Total number of samples in the HDF5 dataset.
+
+    Returns:
+        A starting index in [0, dataset_size).
+    """
+    h = hashlib.sha256(f"priordump-offset-{seed}".encode()).hexdigest()
+    return int(h, 16) % dataset_size
+
+
+class PriorDumpDataLoader(DataLoader):
+    """DataLoader that loads synthetic prior data from an HDF5 dump.
+
+    Args:
+        filename (str): Path to the HDF5 file.
+        num_steps (int): Number of batches per epoch.
+        batch_size (int): Batch size.
+        device (torch.device): Device to load tensors onto.
+        seed (int | None): Random seed for deterministic starting offset.
+            When provided, the loader starts reading from a seed-dependent
+            position in the dataset instead of index 0. This ensures
+            different seeds train on different data slices.
+        skip_steps (int): Number of already-consumed steps to skip past.
+            Used for auto-resume: advances the pointer by
+            ``skip_steps * batch_size`` so the resumed run continues
+            where the previous run left off in the data sequence.
+    """
+
+    def __init__(
+        self,
+        filename: str,
+        num_steps: int,
+        batch_size: int,
+        device: torch.device | None = None,
+        seed: int | None = None,
+        skip_steps: int = 0,
+    ):
+        """Initialize loader."""
+        self.filename = filename
+        self.num_steps = num_steps
+        self.batch_size = batch_size
+        self.device = device if device is not None else get_default_device()
+        with h5py.File(self.filename, "r") as f:
+            self.max_num_classes = f["max_num_classes"][0]  # pyright: ignore
+            dataset_size = f["X"].shape[0]  # pyright: ignore
+        if seed is not None:
+            self.pointer = _seed_to_offset(seed, dataset_size)
+            self.pointer -= self.pointer % self.batch_size
+        else:
+            self.pointer = 0
+        if skip_steps:
+            self.pointer = (self.pointer + skip_steps * batch_size) % dataset_size
+
+    def __iter__(self) -> Iterator[PriorBatch]:
+        """Yield batches."""
+        with h5py.File(self.filename, "r") as f:
+            for _ in range(self.num_steps):
+                assert self.batch_size is not None
+                end = self.pointer + self.batch_size
+                num_features = f["num_features"][self.pointer : end].max()  # pyright: ignore
+                num_datapoints_batch = f["num_datapoints"][self.pointer : end]  # pyright: ignore
+                max_seq_in_batch = int(num_datapoints_batch.max())  # pyright: ignore
+                x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])  # pyright: ignore
+                y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])  # pyright: ignore
+                train_test_split_index = f["single_eval_pos"][self.pointer : end]  # pyright: ignore
+
+                self.pointer += self.batch_size
+                if self.pointer >= f["X"].shape[0]:  # pyright: ignore
+                    print("Finished iteration over all stored datasets!")
+                    self.pointer = 0
+
+                yield PriorBatch(
+                    x=x.to(self.device),
+                    y=y.to(self.device),
+                    train_test_split_index=train_test_split_index[0].item(),  # pyright: ignore
+                )
+
+    def __len__(self):
+        """Return number of steps."""
+        return self.num_steps
+
+
+class NanopriorDataset(torch.utils.data.IterableDataset):
+    """IterableDataset that generates synthetic prior data on the fly.
+
+    Args:
+        num_steps (int): Number of batches per epoch.
+        batch_size (int): Batch size.
+        max_seq_len (int): Maximum number of rows per dataset.
+        max_features (int): Maximum number of features per dataset.
+        max_classes (int): Maximum number of classes.
+        device (torch.device): Device to load tensors onto.
+    """
+
+    def __init__(
+        self,
+        num_steps: int,
+        batch_size: int,
+        max_seq_len: int = config.MAX_ROWS,
+        max_features: int = config.MAX_FEATURES,
+        max_classes: int = config.MAX_CLASSES,
+        device: torch.device | None = None,
+    ):
+        """Initialize dataset."""
+        super().__init__()
+        self.num_steps = num_steps
+        self.batch_size = batch_size
+        self.max_seq_len = max_seq_len
+        self.max_features = max_features
+        self.max_classes = max_classes
+        self.device = device if device is not None else get_default_device()
+
+    def __iter__(self) -> Iterator[PriorBatch]:
+        """Yield batches."""
+        import math
+
+        from nanotabpfn.prior import rand_cat_sizes, rand_dataset_filtered
+
+        worker_info = torch.utils.data.get_worker_info()
+        # split steps across workers if in multi-process loading
+        steps = self.num_steps if worker_info is None else math.ceil(self.num_steps / float(worker_info.num_workers))
+
+        for _ in range(steps):
+            n_samples = np.random.randint(min(100, self.max_seq_len), self.max_seq_len + 1)
+            n_features = np.random.randint(2, self.max_features + 1)
+            n_classes = np.random.randint(2, self.max_classes + 1)
+
+            x_cat_sizes = rand_cat_sizes(n_features)
+            y_cat_sizes = [n_classes]
+
+            xs, ys = [], []
+            for _ in range(self.batch_size):
+                tensors = rand_dataset_filtered(x_cat_sizes, y_cat_sizes, n_samples)
+                x = torch.cat([tensors[f"x_{i}"] for i in range(len(x_cat_sizes))], dim=-1)
+                y = tensors["y_0"].squeeze(-1)
+                xs.append(x)
+                ys.append(y)
+
+            x_batch = torch.stack(xs, dim=0)
+            y_batch = torch.stack(ys, dim=0)
+
+            # 50% to 90% of samples used for training
+            train_test_split_index = int(n_samples * np.random.uniform(0.5, 0.9))
+
+            yield PriorBatch(
+                x=x_batch.to(self.device),
+                y=y_batch.to(self.device),
+                train_test_split_index=train_test_split_index,
+            )
+
+    def __len__(self):
+        """Return number of steps."""
+        return self.num_steps
+
+
+if __name__ == "__main__":
+    set_randomness_seed(0)
+    device = get_default_device()
+    model = NanoTabPFNModel(
+        embedding_size=128,
+        num_attention_heads=4,
+        mlp_hidden_size=192,
+        num_layers=3,
+        num_outputs=2,
+    )
+    dataset = NanopriorDataset(num_steps=2500, batch_size=32, device=device)
+    prior = DataLoader(dataset, batch_size=None, num_workers=0)
+    model, history = train(model, prior, lr=4e-3, steps_per_eval=25, eval_func=eval)
+    print("Final evaluation:")
+    print(eval(NanoTabPFNClassifier(model, device)))

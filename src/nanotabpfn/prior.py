@@ -20,7 +20,7 @@ def rand_dataset_plain(x_cat_sizes: list[int], y_cat_sizes: list[int], n_samples
             node_cat_sizes[node_idx][f'{feature_group}_{idx}'] = cat_size
 
     # ----- Evaluate computation graph -----
-    node_values = [None for _ in range(n_nodes)]
+    node_values: list[Any] = [None for _ in range(n_nodes)]
     columns = dict()
     for node_idx in range(n_nodes):
         parent_values = [node_values[parent] for parent in graph[node_idx]]
@@ -139,7 +139,7 @@ def rand_multi_func(xs: list[torch.Tensor], d_out: int):
         return rand_func(torch.cat(xs, dim=-1), d_out)  # concatenate before random function
     out_cat = torch.stack([rand_func(x, d_out) for x in xs], dim=0)
     agg = randchoice([torch.sum, torch.prod, torch.max, torch.logsumexp])(out_cat, dim=0)
-    return agg.values if isinstance(agg, tuple) else agg  # torch.max returns a namedtuple
+    return agg[0] if isinstance(agg, tuple) else agg  # torch.max returns a namedtuple
 
 # ----- Random function -----
 
@@ -341,7 +341,7 @@ if __name__ == '__main__':
         y = tensors['y_0'].squeeze(-1)
 
         ax.set(xticks=[], yticks=[])
-        ax.scatter(x[:, 0], x[:, 1], c=y, cmap=ListedColormap(plt.get_cmap("tab10").colors[:n_classes]),
+        ax.scatter(x[:, 0], x[:, 1], c=y, cmap=ListedColormap(plt.get_cmap("tab10").colors[:n_classes]),  # pyright: ignore
                    vmin=0, vmax=n_classes - 1, s=40, marker=".", linewidths=0)
 
     plt.tight_layout()
