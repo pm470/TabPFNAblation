@@ -2,6 +2,36 @@
 
 This project investigates whether modern activation functions (SwiGLU, Mish, etc.) improve the performance of tabular foundation models compared to the standard GELU baseline. The codebase is a specialized, distributed fork built on top of [nanoTabPFN](https://github.com/automl/nanoTabPFN).
 
+## Results
+
+All activations were evaluated on the [TabArena](https://github.com/autogluon/tabarena) benchmark (26 classification datasets) using 20 seeds each. P-values are from a two-sided T-Test against the GELU baseline.
+
+### Per-Dataset Relative Improvement over GELU
+
+![Relative improvement over GELU baseline (ROC-AUC, TabArena)](plots/relative_improvement_roc_auc.png)
+
+### TabArena ROC-AUC Summary
+
+| Activation | Variant | ROC-AUC | p-value |
+|---|---|---|---|
+| Bilinear | Parameter-matched | **0.837** | 1.95e-07 |
+| Bilinear | Full width | **0.837** | 1.50e-05 |
+| SwiGLU | Parameter-matched | 0.836 | 5.07e-06 |
+| SwiGLU | Full width | **0.837** | 7.33e-06 |
+| PReLU | | 0.835 | 1.15e-08 |
+| Leaky ReLU | | 0.835 | 1.49e-04 |
+| ReLU | | 0.834 | 1.60e-05 |
+| Swish | | 0.834 | 2.40e-04 |
+| GELU (baseline) | | 0.832 | — |
+
+All tested activations significantly outperform the GELU baseline (p < 0.001).
+
+### Learning Curves: Baseline vs. Two Best Variants
+
+![Learning curves for GELU, SwiGLU*, and Bilinear](plots/learning_curves_best.png)
+
+---
+
 ## Local Setup & Development
 
 This project uses [mise](https://mise.jdx.dev/) for Python version management and `uv` for dependency resolution.
